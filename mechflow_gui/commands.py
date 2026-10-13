@@ -659,6 +659,29 @@ def register():
         "Structural Member", "Steel sections (UKB, UKC, PFC, angle, SHS, RHS, CHS) along "
         "sketch lines, cut at the corners", icon_path("StructuralMember.svg"),
         lambda: _run("weldments", "structural_member"), lambda: True))
+    for name, menu, tip, icon, fn in (
+            ("TrimExtend", "Trim/Extend", "Trim or extend a structural member's free ends to "
+             "other members or bodies", "TrimExtend.svg", "trim_extend"),
+            ("EndCap", "End Cap", "Close the open ends of tubes and members with a plate",
+             "EndCap.svg", "end_cap"),
+            ("Gusset", "Gusset", "Triangular plate between two member faces", "Gusset.svg",
+             "gusset")):
+        Gui.addCommand("MechFlow_" + name, _simple(
+            menu, tip, icon_path(icon), (lambda f=fn: _run("weld_extras", f)),
+            lambda: App.ActiveDocument is not None))
+    from mechflow_gui import sheet_metal as _sm
+    for name, menu, cmd, tip in _sm.COMMANDS:
+        Gui.addCommand("MechFlow_" + name, _simple(
+            menu, tip, _sm.icon_for(cmd), (lambda c=cmd: _run("sheet_metal", "run", c)),
+            (lambda c=cmd: _sm.is_active(c))))
+    Gui.addCommand("MechFlow_SM_Flatten", _simple(
+        "Flatten", "Show the flat pattern of the sheet metal part (click again to fold it "
+        "back)", icon_path("Flatten.svg"), lambda: _run("sheet_metal", "flatten"),
+        lambda: App.ActiveDocument is not None))
+    Gui.addCommand("MechFlow_SM_SaveDXF", _simple(
+        "Save Flat as DXF", "Save the flat pattern (outline, holes, bend lines) as a DXF for "
+        "laser / punch", icon_path("FlatDXF.svg"), lambda: _run("sheet_metal", "save_flat_dxf"),
+        lambda: App.ActiveDocument is not None))
     Gui.addCommand("MechFlow_CutList", _simple(
         "Cut List", "Weldment cut list: members by section and length, with cut angles",
         icon_path("CutList.svg"), lambda: _run("weldments", "cut_list"), lambda: True))

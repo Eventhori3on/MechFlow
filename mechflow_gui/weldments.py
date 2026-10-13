@@ -183,8 +183,10 @@ def _halfspace(p, n, keep_negative, size):
     return box
 
 
-def build(segs, t, size, rotation=0.0, mirror=False, corner=CORNERS[0]):
-    """[(solid, info)] for the members of a frame."""
+def build(segs, t, size, rotation=0.0, mirror=False, corner=CORNERS[0], trims=None,
+          trim_type="Planar"):
+    """[(solid, info)] for the members of a frame. trims: [(seg or None,
+    solid)] boundaries free member ends are trimmed / extended to."""
     face, _r = profile(t, size)
     bb = face.BoundBox
     big = 4 * max(bb.XLength, bb.YLength) + 10
@@ -268,6 +270,13 @@ def build(segs, t, size, rotation=0.0, mirror=False, corner=CORNERS[0]):
                 ext[(i, k)] = big
                 cuts[i].append(("against", j, k))
                 break
+        else:
+            # Trim / Extend: a free end reaching another member or body
+            hit = _boundary_hit(segs[i], k, trims or [], big) if trims else None
+            if hit is not None:
+                dist, bseg, bsolid = hit
+                ext[(i, k)] = max(0.0, dist) + big
+                cuts[i].append(("boundary", (bseg, bsolid), k))
     result = []
     for i, s in enumerate(segs):
         solid = raw(i)
@@ -276,11 +285,71 @@ def build(segs, t, size, rotation=0.0, mirror=False, corner=CORNERS[0]):
                 solid = solid.cut(_halfspace(a, b, False, span))
             elif kind == "keep_pos":
                 solid = solid.cut(_halfspace(a, b, True, span))
+            elif kind == "boundary":
+                bseg, bsolid = a
+                if bseg is not None and trim_type == "Planar":
+                    solid, ang = _stop_against(solid, s, b, bseg, bsolid, span)
+                else:
+                    solid, ang = _stop_body(solid, s, b, bsolid), 0.0
+                angles[(i, b)] = ang
             else:                           # against member a, at our end b
                 solid, ang = _stop_against(solid, s, b, segs[a], raw(a), span)
                 angles[(i, b)] = ang
         result.append((solid, dict(seg=s, angle0=angles[(i, 0)], angle1=angles[(i, 1)])))
     return result
+
+
+def _boundary_hit(s, k, trims, size):
+    """(distance along the member past its end, boundary seg, boundary solid)
+    for the nearest boundary the free end k of s runs into (or is in)."""
+    import Part
+    p = s.b if k == 1 else s.a
+    u = s.dir if k == 1 else s.dir * -1
+    best = None
+    for bseg, bsolid in trims:
+        if bseg is not None:
+            # closest approach of the two lines
+            d = bseg.dir
+            w0 = p - bseg.a
+            b = u.dot(d)
+            den = 1 - b * b
+            if den < 1e-9:
+                continue
+            tt = (b * w0.dot(d) - w0.dot(u)) / den
+            ss = (w0.dot(d) - b * w0.dot(u)) / den
+            gap = ((p + u * tt) - (bseg.a + d * ss)).Length
+            if gap > 2 * size or not (-size <= ss <= bseg.length + size):
+                continue
+            if tt < -size or tt > 1e5:
+                continue
+            if best is None or tt < best[0]:
+                best = (tt, bseg, bsolid)
+        else:
+            try:
+                ray = Part.Edge(Part.LineSegment(p - u * size, p + u * 1e5))
+                common = ray.common(bsolid)
+            except Exception:
+                continue
+            pts = [v.Point for v in common.Vertexes]
+            if not pts:
+                continue
+            tt = min((q - p).dot(u) for q in pts)
+            if best is None or tt < best[0]:
+                best = (tt, None, bsolid)
+    return best
+
+
+def _stop_body(solid, s, k, body):
+    """Cut a member to the shape of a body it runs into (coped)."""
+    import Part
+    try:
+        pieces = solid.cut(body).Solids
+    except Exception:
+        return solid
+    if not pieces:
+        return solid
+    far = s.a if k == 1 else s.b
+    return min(pieces, key=lambda x: x.distToShape(Part.Vertex(far))[0])
 
 
 def _stop_against(solid, s, k, other, other_solid, span):
@@ -324,6 +393,7 @@ class StructuralMember:
                         "Mirror the profile (channels and angles)")
         obj.addProperty("App::PropertyEnumeration", "CornerTreatment", "Structural member",
                         "How members meet at corners")
+        _add_trim_props(obj)
         obj.Profile = list(D.TYPES.keys())
         obj.Profile = t
         obj.Size = D.sizes(t)
@@ -344,13 +414,14 @@ class StructuralMember:
 
     def execute(self, obj):
         import Part
+        _add_trim_props(obj)
         links = [(o, [x for x in s if x]) for o, s in obj.Path]
         segs = segments(links)
         if not segs:
             obj.Shape = Part.Shape()
             return
         parts = build(segs, obj.Profile, obj.Size, float(obj.Rotation), obj.Mirror,
-                      obj.CornerTreatment)
+                      obj.CornerTreatment, trim_boundaries(obj), obj.TrimType)
         obj.Shape = Part.makeCompound([p for p, _i in parts])
         obj.Placement = App.Placement()
 
@@ -359,6 +430,32 @@ class StructuralMember:
 
     def loads(self, state):
         return None
+
+
+def _add_trim_props(obj):
+    if not hasattr(obj, "TrimTo"):
+        obj.addProperty("App::PropertyLinkList", "TrimTo", "Trim/Extend",
+                        "Members or bodies this member's free ends are trimmed / extended to")
+        obj.addProperty("App::PropertyEnumeration", "TrimType", "Trim/Extend",
+                        "Planar: square to the face met. Body: cut to the body's shape")
+        obj.TrimType = ["Planar", "Body"]
+
+
+def trim_boundaries(obj):
+    """[(seg or None, solid)] for an object's Trim/Extend boundaries."""
+    out = []
+    for b in getattr(obj, "TrimTo", []) or []:
+        if b is obj or not hasattr(b, "Shape") or b.Shape.isNull():
+            continue
+        if is_member(b):
+            bsegs = segments([(o, [x for x in s_ if x]) for o, s_ in b.Path])
+            sols = b.Shape.Solids
+            if len(sols) == len(bsegs):
+                out += list(zip(bsegs, sols))
+                continue
+        for sol in b.Shape.Solids:
+            out.append((None, sol))
+    return out
 
 
 class ViewProviderStructuralMember:
@@ -678,13 +775,23 @@ def cut_items(doc=None):
             continue
         links = [(x, list(s)) for x, s in o.Path]
         segs = segments(links)
-        parts = build(segs, o.Profile, o.Size, float(o.Rotation), o.Mirror, o.CornerTreatment)
+        parts = build(segs, o.Profile, o.Size, float(o.Rotation), o.Mirror, o.CornerTreatment,
+                      trim_boundaries(o), getattr(o, "TrimType", "Planar"))
         for solid, info in parts:
             s = info["seg"]
             vals = [(v.Point - s.a).dot(s.dir) for v in solid.Vertexes]
             length = round(max(vals) - min(vals), 1)
             a = sorted((round(info["angle0"], 1), round(info["angle1"], 1)))
             key = (designation(o.Profile, o.Size), length, a[0], a[1])
+            if key not in rows:
+                rows[key] = 0
+                order.append(key)
+            rows[key] += 1
+    from mechflow_gui import weld_extras
+    for o in doc.Objects:
+        if weld_extras.is_plate(o) and not o.Shape.isNull():
+            desc, size = weld_extras.plate_row(o)
+            key = (desc, size, 0.0, 0.0)
             if key not in rows:
                 rows[key] = 0
                 order.append(key)
@@ -721,7 +828,7 @@ def cut_list():
         sh.set(f"A{i}", str(i - 1))
         sh.set(f"B{i}", str(qty))
         sh.set(f"C{i}", "'" + desc)
-        sh.set(f"D{i}", f"{length:g}")
+        sh.set(f"D{i}", f"{length:g}" if not isinstance(length, str) else "'" + length)
         sh.set(f"E{i}", f"{a1:g}")
         sh.set(f"F{i}", f"{a2:g}")
     for c, w in zip("ABCDEF", (70, 50, 200, 80, 70, 70)):
@@ -736,8 +843,8 @@ def cut_list():
     tbl.verticalHeader().setVisible(False)
     tbl.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
     for r, (desc, length, a1, a2, qty) in enumerate(items):
-        for c, val in enumerate((str(r + 1), str(qty), desc, f"{length:g}", f"{a1:g}",
-                                 f"{a2:g}")):
+        ln = length if isinstance(length, str) else f"{length:g}"
+        for c, val in enumerate((str(r + 1), str(qty), desc, ln, f"{a1:g}", f"{a2:g}")):
             it = QtWidgets.QTableWidgetItem(val)
             if c != 2:
                 it.setTextAlignment(QtCore.Qt.AlignCenter)

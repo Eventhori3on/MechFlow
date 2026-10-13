@@ -68,8 +68,21 @@ Each feature has its own panel, and you edit it again by double-clicking.
   sizes. Corners are cut with **End miter**, **End butt 1** or **End butt
   2**; a member that ends on the side of another (a cross rail, a post) is cut
   square to its face. Rotate or mirror the profile; double-click to edit.
+- **Trim/Extend:** trim or extend one member group's free ends to other
+  members (cut square to the face) or to any body (cut to its shape).
+- **End Cap** on tube ends (outward or inward, inset) and **Gusset** plates
+  between two member faces (legs, thickness, corner relief).
 - **Cut List:** members grouped by section and length, with the cut angles,
-  saved as a spreadsheet.
+  plus end caps and gussets, saved as a spreadsheet.
+
+### Sheet metal
+- A **Sheet Metal** tab with SOLIDWORKS names: Base Flange/Tab, Convert to
+  Sheet Metal, Edge Flange, Sketched Bend, Hem, Extend Tab, Extruded Cut,
+  Corner and Bend Relief, Rip, Insert Bends, Forming Tool.
+- **Flatten** shows the flat pattern (click again to fold back) and **Save
+  Flat as DXF** writes it for the laser.
+- Uses the free **SheetMetal Workbench** (Addon Manager); MechFlow offers to
+  install it the first time.
 
 ![Weldment frames](docs/screenshots/weldments.png)
 
