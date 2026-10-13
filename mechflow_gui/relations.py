@@ -430,6 +430,7 @@ _panel = None
 _timer = None
 _last = None
 _hold = False
+suspended = False       # another sketch panel (e.g. Circular Pattern) is open
 
 
 def _mdi():
@@ -468,6 +469,8 @@ def toggle():
 
 def _tick():
     global _panel, _last, _hold
+    if suspended:
+        return
     sk = sketch_status.sketch_in_edit()
     if sk is not None and hidden():
         if _panel is not None:

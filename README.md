@@ -53,8 +53,11 @@ Each feature has its own panel, and you edit it again by double-clicking.
   (Coincident, Horizontal, Midpoint, Tangent, Concentric, Collinear, ...).
   **Display/Delete Relations** lists the existing ones.
 - Smart Dimension snaps to model edges without a Convert Entities step.
+- **Circular Sketch Pattern** panel: centre (origin or a picked point),
+  instances, angle, equal spacing, reverse; live preview, and the result is
+  constrained so it follows the original.
 - The Sketch tab has the full set: Centre Rectangle, 3 Point Arc, Sketch
-  Chamfer, Extend/Split, Linear/Circular Sketch Pattern, Move/Copy/Scale,
+  Chamfer, Extend/Split, Linear Sketch Pattern, Move/Copy/Scale,
   Repair Sketch.
 
 ### Drawings

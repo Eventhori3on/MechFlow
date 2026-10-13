@@ -79,7 +79,7 @@ TABS = [
         None,
         ("stack", [("Mirror Entities", "Sketcher_Symmetry"),
                    ("Linear Sketch Pattern", "Sketcher_RectangularArray"),
-                   ("Circular Sketch Pattern", "Sketcher_Rotate")]),
+                   ("Circular Sketch Pattern", "MechFlow_CircularSketchPattern")]),
         ("stack", [("Move Entities", "Sketcher_Translate"),
                    ("Copy Entities", "Sketcher_Copy"),
                    ("Scale Entities", "Sketcher_Scale")]),

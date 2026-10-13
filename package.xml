@@ -2,7 +2,7 @@
 <package format="1" xmlns="https://wiki.freecad.org/Package_Metadata">
   <name>MechFlow</name>
   <description>A SOLIDWORKS-style workflow for FreeCAD: tabbed CommandManager, SOLIDWORKS-named feature dialogs (extrude, revolve, sweep, loft, fillet, shell, patterns, Hole Wizard), sketch relations and status colours, drawings from parts, assembly mates, a Toolbox of standard fasteners that size themselves to holes, Section View and rollback.</description>
-  <version>0.18.0</version>
+  <version>0.18.1</version>
   <date>2026-10-13</date>
   <maintainer email="watermanengineeringlimited@proton.me">Waterman Engineering</maintainer>
   <license file="LICENSE">LGPL-2.1-or-later</license>
