@@ -21,9 +21,9 @@ import FreeCAD as App
 import FreeCADGui as Gui
 
 try:
-    from PySide6 import QtWidgets
+    from PySide6 import QtCore, QtWidgets
 except ImportError:
-    from PySide2 import QtWidgets
+    from PySide2 import QtCore, QtWidgets
 
 PARAMS = "User parameter:BaseApp/Preferences/Mod/MechFlow"
 
@@ -261,10 +261,13 @@ def add_standard_views(page, objs, projection=FIRST, with_iso=True, scale=None):
     page.addView(g)
     g.Source = objs
     g.ProjectionType = projection
-    for v in ("Front", "Top", "Right"):
-        g.addProjection(v)
+    # Scale first: the group spaces its views out as they're added, and
+    # spacing worked out at 1:1 isn't redone when the scale changes later
+    # (a 1:20 drawing had its top and side views 2 m off the sheet).
     g.ScaleType = "Custom"
     g.Scale = scale
+    for v in ("Front", "Top", "Right"):
+        g.addProjection(v)
     iso = None
     if with_iso:
         iso = doc.addObject("TechDraw::DrawViewPart", "Isometric")
@@ -278,6 +281,10 @@ def add_standard_views(page, objs, projection=FIRST, with_iso=True, scale=None):
     _place(page, t, g, iso, objs, scale, projection)
     page.Scale = scale
     fill_title_block(t, objs, scale)
+    doc.recompute()
+    # and once more so the group re-spaces its views from their real sizes
+    for item in list(getattr(g, "Views", [])) + [g]:
+        item.touch()
     doc.recompute()
     return g, iso, scale
 
@@ -446,6 +453,45 @@ def sheet_format():
     doc.recompute()
 
 
+def _view_state(page):
+    out = []
+    for v in page.Views:
+        for x in [v] + list(getattr(v, "Views", [])):
+            if hasattr(x, "getVisibleEdges"):
+                try:
+                    out.append((x.Name, len(x.getVisibleEdges()), round(float(x.X), 3), round(float(x.Y), 3)))
+                except Exception:
+                    out.append((x.Name, 0, 0, 0))
+    return out
+
+
+def wait_for_views(page, timeout=90.0):
+    """TechDraw works out hidden lines in the background, so a big model's
+    views can still be blank (or not yet spaced out) for a few seconds after
+    they're made. Wait until every view has its lines and stops changing,
+    so a PDF / DXF saved straight away isn't missing views."""
+    import time
+    t0 = time.time()
+    last, stable = None, 0
+    QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
+    try:
+        while time.time() - t0 < timeout:
+            QtWidgets.QApplication.processEvents()
+            st = _view_state(page)
+            if st and all(n > 0 for _name, n, _x, _y in st) and st == last:
+                stable += 1
+                if stable >= 4:
+                    break
+            else:
+                stable = 0
+            last = st
+            time.sleep(0.25)
+        page.Document.recompute()
+        QtWidgets.QApplication.processEvents()
+    finally:
+        QtWidgets.QApplication.restoreOverrideCursor()
+
+
 def save_pdf():
     page = active_page()
     if page is None:
@@ -459,4 +505,15 @@ def save_pdf():
                                                     start, "PDF (*.pdf)")
     if path:
         import TechDrawGui
-        TechDrawGui.exportPageAsPdf(page, path)
+        wait_for_views(page)
+        # The FreeCAD theme tints the sheet grey on screen; print it white.
+        cols = App.ParamGet("User parameter:BaseApp/Preferences/Mod/TechDraw/Colors")
+        had = cols.GetUnsigned("PageColor", 0)
+        cols.SetUnsigned("PageColor", 0xFFFFFFFF)
+        try:
+            TechDrawGui.exportPageAsPdf(page, path)
+        finally:
+            if had:
+                cols.SetUnsigned("PageColor", had)
+            else:
+                cols.RemUnsigned("PageColor")

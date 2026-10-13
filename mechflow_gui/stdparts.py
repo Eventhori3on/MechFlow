@@ -490,7 +490,11 @@ def make(container, t, size, rating, length=1000.0, attach=None):
     o = doc.addObject("Part::FeaturePython", "StdPart")
     if container is not None:
         container.addObject(o)
-    StdPart(o, t, size, rating, length, attach)
+    try:
+        StdPart(o, t, size, rating, length, attach)
+    except Exception:
+        doc.removeObject(o.Name)          # don't leave a half-made part behind
+        raise
     if App.GuiUp:
         ViewProviderStdPart(o.ViewObject)
         try:

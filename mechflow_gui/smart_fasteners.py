@@ -28,6 +28,9 @@ except ImportError:
 from mechflow_gui import toolbox
 
 V = App.Vector
+# ISO 7089 washer thickness, for the length shown before OK
+WASHER_H = {"M3": 0.5, "M4": 0.8, "M5": 1.0, "M6": 1.6, "M8": 1.6, "M10": 2.0, "M12": 2.5,
+            "M14": 2.5, "M16": 3.0, "M20": 3.0, "M24": 4.0, "M30": 4.0}
 TYPES = [("ISO4762", "Socket head cap screw (ISO 4762)"),
          ("ISO4017", "Hex head screw (ISO 4017)"),
          ("ISO4014", "Hex head bolt (ISO 4014)"),
@@ -43,11 +46,48 @@ def _is_hardware(o):
     return name in ("FSScrewObject",) or stdparts.is_std_object(o)
 
 
+def _expand(o, shape):
+    """A component as [(object, shape, sub-name prefix)]. A part kept in a
+    Part container (or a link to one) is looked into, so edge names are
+    'Body.Edge5' - names FreeCAD can resolve through the container."""
+    import Part
+    lo = o
+    try:
+        lo = o.getLinkedObject(True)
+    except Exception:
+        pass
+    if lo is not None and lo.TypeId == "App::Part":
+        out = []
+        for c in lo.Group:
+            if c.TypeId.startswith("App::Origin") or c.TypeId == "Sketcher::SketchObject":
+                continue
+            if c.getParentGeoFeatureGroup() is not lo or _is_hardware(c):
+                continue
+            try:
+                sh = Part.getShape(o, c.Name + ".")
+            except Exception:
+                continue
+            if sh.isNull() or not sh.Solids:
+                continue
+            out += [(o, x[1], c.Name + "." + x[2]) for x in _expand_child(c, sh)]
+        return out
+    return [(o, shape, "")]
+
+
+def _expand_child(c, sh):
+    return [(c, sh, "")]
+
+
 def components(container=None, doc=None):
-    """[(object, shape in container coordinates)] to look for holes in."""
+    """[(object, shape in container coordinates, sub-name prefix)] to look
+    for holes in."""
     if container is not None and container.isDerivedFrom("Assembly::AssemblyObject"):
         from mechflow_gui import assembly
-        return [(o, s) for o, s in assembly.components(container) if not _is_hardware(o)]
+        out = []
+        for o, s in assembly.components(container):
+            if not _is_hardware(o):
+                out += _expand(o, s)
+        return out
     doc = doc or App.ActiveDocument
     out = []
     for o in doc.Objects:
@@ -63,7 +103,7 @@ def components(container=None, doc=None):
             continue
         if sh is None or sh.isNull() or not sh.Solids:
             continue
-        out.append((o, sh))
+        out += _expand(o, sh)
     return out
 
 
@@ -76,11 +116,12 @@ def _canon(axis):
 
 
 class Segment:
-    def __init__(self, obj, shape, r, lo, hi):
+    def __init__(self, obj, shape, r, lo, hi, prefix=""):
         self.obj, self.shape, self.r, self.lo, self.hi = obj, shape, r, lo, hi
+        self.prefix = prefix
 
 
-def hole_segments(obj, shape):
+def hole_segments(obj, shape, prefix=""):
     """Concave (hole) cylinders of a shape, keyed by axis line."""
     out = {}
     for f in shape.Faces:
@@ -105,7 +146,7 @@ def hole_segments(obj, shape):
         ts = [(v.Point - p0).dot(a) for v in f.Vertexes] or [0.0]
         key = (round(a.x, 4), round(a.y, 4), round(a.z, 4),
                round(p0.x, 1), round(p0.y, 1), round(p0.z, 1))
-        out.setdefault(key, (a, p0, []))[2].append(Segment(obj, shape, r, min(ts), max(ts)))
+        out.setdefault(key, (a, p0, []))[2].append(Segment(obj, shape, r, min(ts), max(ts), prefix))
     return out
 
 
@@ -115,6 +156,7 @@ class Entry:
 
     def __init__(self, segs):
         self.obj, self.shape = segs[0].obj, segs[0].shape
+        self.prefix = segs[0].prefix
         self.rp = min(s.r for s in segs)
         self.rmax = max(s.r for s in segs)
         self.lo = min(s.lo for s in segs)
@@ -206,7 +248,7 @@ class Stack:
             d = c.Center - self.p0
             along = d.dot(self.axis)
             if abs(along - t) < 1e-3 and (d - self.axis * along).Length < 1e-3:
-                return f"Edge{i + 1}"
+                return f"{entry.prefix}Edge{i + 1}"
         return None
 
     def hole(self):
@@ -224,7 +266,7 @@ class Stack:
                 continue
             if abs(along - h_end) < 0.6 * c.Radius + 1e-3:
                 if best is None or c.Radius > best[1]:
-                    best = (f"Edge{i + 1}", c.Radius)
+                    best = (f"{self.head.prefix}Edge{i + 1}", c.Radius)
         if best is None:
             return None
         h = toolbox.Hole(self.head.obj, best[0])
@@ -303,9 +345,9 @@ def find_stacks(container=None, only=None):
     """All hole stacks to fill. only: objects to limit the search to."""
     lines = {}
     comps = components(container)
-    solids = [sh for _o, sh in comps]
-    for obj, shape in comps:
-        for key, (a, p0, segs) in hole_segments(obj, shape).items():
+    solids = [c[1] for c in comps]
+    for obj, shape, prefix in comps:
+        for key, (a, p0, segs) in hole_segments(obj, shape, prefix).items():
             lines.setdefault(key, (a, p0, []))[2].append(segs)
     doc = container.Document if container is not None else App.ActiveDocument
     fasteners = [o for o in doc.Objects
@@ -461,7 +503,7 @@ class SmartFastenersPanel:
         offset = 0.0
         if getattr(self, "washer", None) is not None and self.washer.isChecked() \
                 and g.ftype not in toolbox.COUNTERSUNK:
-            offset = 0.16 * toolbox.METRIC.get(s0.size, (8.0,))[0]
+            offset = WASHER_H.get(s0.size, 0.2 * toolbox.METRIC.get(s0.size, (8.0,))[0])
         ln = toolbox.auto_length(g.ftype, s0.h, s0.size, self._ends(), offset)
         extra = ""
         if s0.tapped is None and s0.h.through and self._ends() == toolbox.ENDS[1]:
@@ -507,11 +549,14 @@ def smart_fasteners():
     toolbox.patch_labels()
     panel = SmartFastenersPanel()
     if not panel.groups:
-        skipped = [s for s in panel.stacks if not s.ok]
+        why = {}
+        for s in panel.stacks:
+            if not s.ok:
+                why[s.reason] = why.get(s.reason, 0) + 1
         QtWidgets.QMessageBox.information(
             Gui.getMainWindow(), "Smart Fasteners",
             "No empty clearance or tapped holes found." +
-            (f" ({len(skipped)} holes skipped: not standard sizes.)" if skipped else ""))
+            ("\n\nSkipped: " + "; ".join(f"{n} {r}" for r, n in why.items()) if why else ""))
         return None
     Gui.Control.showDialog(panel)
     return panel

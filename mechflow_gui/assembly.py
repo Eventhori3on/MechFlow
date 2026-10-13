@@ -337,6 +337,7 @@ class MatePanel:
         elif self.joint.JointType != jtype:
             self.joint.JointType = jtype
         self._apply_values()
+        self._ground_hardware()
         try:
             self.joint.Proxy.setJointConnectors(self.joint, self.refs)
             self.msg.setText(f"{name}: the part moves to suit. Choose another mate, flip it, "
@@ -394,6 +395,24 @@ class MatePanel:
             App.Console.PrintWarning(f"MechFlow: flip failed ({e})\n")
         self.doc.recompute()
 
+    def _ground_hardware(self):
+        """Toolbox parts (flanges, pipe, fasteners) are held by the edge they
+        were placed on; in a mate it's the other part that must move, so
+        fix them in place."""
+        grounded = self._grounded()
+        for comp, _sub in self.refs:
+            proxy = type(getattr(comp, "Proxy", None)).__name__
+            if proxy not in ("StdPart", "FSScrewObject") or comp in grounded:
+                continue
+            g = self.U.getJointGroup(self.asm).newObject("App::FeaturePython", "GroundedJoint")
+            self.J.GroundedJoint(g, comp)
+            try:
+                self.J.ViewProviderGroundedJoint(g.ViewObject)
+            except Exception:
+                pass
+            g.Label = f"Fixed ({comp.Label})"
+            self._auto_ground = getattr(self, "_auto_ground", []) + [g]
+
     def _grounded(self):
         out = set()
         try:
@@ -419,6 +438,12 @@ class MatePanel:
         n = 1 + sum(1 for o in self.U.getJointGroup(self.asm).Group
                     if o is not self.joint and o.Label.startswith(self.mate))
         self.joint.Label = f"{self.mate}{n}"
+        # SOLIDWORKS doesn't draw mates in the view: hide the joint markers
+        for j in [self.joint] + list(getattr(self, "_auto_ground", [])):
+            try:
+                j.ViewObject.Visibility = False
+            except Exception:
+                pass
         _name_mates_folder(self.asm)
         self.doc.commitTransaction()
         self.doc.recompute()
@@ -470,13 +495,22 @@ def components(asm):
     return out
 
 
-def interferences(asm, tol=1e-6):
-    """[(part A, part B, overlap volume mm^3)] for parts that overlap."""
+def _is_fastener(o):
+    return type(getattr(o, "Proxy", None)).__name__ == "FSScrewObject"
+
+
+def interferences(asm, tol=1.0, fastener_pairs=False):
+    """[(part A, part B, overlap volume mm^3)] for parts that overlap by more
+    than tol. A bolt through its own nut and washer always 'overlaps' (the
+    thread is modelled at full size), so pairs of fasteners are left out
+    unless fastener_pairs."""
     comps = components(asm)
     found = []
     for i in range(len(comps)):
         for j in range(i + 1, len(comps)):
             (a, sa), (b, sb) = comps[i], comps[j]
+            if not fastener_pairs and _is_fastener(a) and _is_fastener(b):
+                continue
             if not sa.BoundBox.intersect(sb.BoundBox):
                 continue
             try:

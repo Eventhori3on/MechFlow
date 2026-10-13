@@ -15,6 +15,8 @@ except ImportError:
 
 # name: density kg/m^3
 MATERIALS = {
+    "Structural steel S275": 7850.0,
+    "Structural steel S355": 7850.0,
     "Plain carbon steel": 7800.0,
     "AISI 1020 steel": 7900.0,
     "Stainless steel 304": 8000.0,
@@ -69,6 +71,92 @@ def get(obj):
         if o is not None and hasattr(o, "MechFlowDensity") and o.MechFlowDensity > 0:
             return getattr(o, "MechFlowMaterial", "") or "Custom", float(o.MechFlowDensity)
     return None, None
+
+
+HARDWARE_DENSITY = 7850.0   # bolts, nuts, flanges, pipe: steel unless set
+
+
+def _is_hardware(o):
+    t = type(getattr(o, "Proxy", None)).__name__
+    return t in ("FSScrewObject", "FSWasherObject", "FSNutObject", "StdPart") or \
+        o.TypeId.startswith("Part::FeaturePython") and hasattr(o, "MechFlowInstance") or \
+        hasattr(o, "diameter") and hasattr(o, "type")
+
+
+def _is_weldment(o):
+    return type(getattr(o, "Proxy", None)).__name__ in ("StructuralMember", "EndCap", "Gusset")
+
+
+def _part_density(doc):
+    """Material of a document's (only) body: weldment members inherit it."""
+    found = [get(o) for o in doc.Objects if o.TypeId == "PartDesign::Body"]
+    found = [f for f in found if f[1]]
+    return found[0] if len(found) == 1 else (None, None)
+
+
+def mass_items(objs):
+    """[(label, global solid shape, material, density or None)] for what's
+    selected: bodies, weldment parts, and every solid inside Parts, links and
+    assemblies (SOLIDWORKS' Mass Properties of a whole assembly)."""
+    import Part
+    out = []
+    seen = set()
+
+    def add(label, shape, src):
+        if shape is None or shape.isNull() or not shape.Solids:
+            return
+        mat, d = get(src)
+        if d is None and _is_weldment(src):
+            mat, d = _part_density(src.Document)
+        if d is None and _is_hardware(src):
+            mat, d = "Steel (standard part)", HARDWARE_DENSITY
+        out.append((label, shape, mat, d))
+
+    def walk(top, path, obj):
+        lo = obj.getLinkedObject(True) if obj.TypeId == "App::Link" or hasattr(obj, "LinkedObject") else obj
+        if lo.TypeId in ("App::Part", "Assembly::AssemblyObject") or lo.isDerivedFrom("App::Part"):
+            for c in getattr(lo, "Group", []):
+                if c.TypeId.startswith("App::Origin") or c.TypeId == "Sketcher::SketchObject":
+                    continue
+                try:
+                    if c.getParentGeoFeatureGroup() not in (lo, None):
+                        continue
+                except Exception:
+                    pass
+                if c.TypeId in ("Assembly::JointGroup", "Assembly::ViewGroup", "Assembly::BomGroup"):
+                    continue
+                walk(top, path + c.Name + ".", c)
+            return
+        key = (top.Name, path)
+        if key in seen:
+            return
+        seen.add(key)
+        if path:
+            try:
+                sh = Part.getShape(top, path)
+            except Exception:
+                return
+        else:
+            sh = getattr(obj, "Shape", None)
+        try:
+            vis = obj.Visibility if obj is lo else lo.Visibility or obj.Visibility
+        except Exception:
+            vis = True
+        if not vis and path:
+            return
+        add(obj.Label, sh, lo)
+
+    for o in objs:
+        if o.TypeId == "PartDesign::Body" or (hasattr(o, "Shape") and o.TypeId not in
+                                               ("App::Part", "App::Link", "Assembly::AssemblyObject")
+                                               and not o.isDerivedFrom("App::Part")):
+            if (o.Document.Name, o.Name) in seen:
+                continue
+            seen.add((o.Document.Name, o.Name))
+            add(o.Label, getattr(o, "Shape", None), o)
+        else:
+            walk(o, "", o)
+    return out
 
 
 def set_material(body, name, density):

@@ -197,7 +197,8 @@ class Hole:
         try:
             edge = Part.getShape(obj, sub, needSubElement=True, noElementMap=True)
             prefix = ".".join(sub.split(".")[:-1])
-            solid = Part.getShape(obj, prefix, needSubElement=False, noElementMap=True)
+            solid = Part.getShape(obj, prefix + "." if prefix else "", needSubElement=False,
+                                  noElementMap=True)
         except Exception:
             return
         if not hasattr(edge, "Curve") or type(edge.Curve).__name__ != "Circle":
@@ -403,7 +404,8 @@ def _outward(obj, sub):
     try:
         e = Part.getShape(obj, sub, needSubElement=True, noElementMap=True)
         prefix = ".".join(sub.split(".")[:-1])
-        solid = Part.getShape(obj, prefix, needSubElement=False, noElementMap=True)
+        solid = Part.getShape(obj, prefix + "." if prefix else "", needSubElement=False,
+                              noElementMap=True)
         c, ax, r = e.Curve.Center, App.Vector(e.Curve.Axis).normalize(), e.Curve.Radius
         radial = ax.cross(App.Vector(1, 0, 0))
         if radial.Length < 1e-6:
@@ -554,7 +556,8 @@ def attachable_selection(container=None):
                 if type(shape.Curve).__name__ == "Circle" and not dup(shape):
                     out.append((obj, [sub]))
             elif isinstance(shape, Part.Face):
-                whole = Part.getShape(obj, ".".join(sub.split(".")[:-1]),
+                pre = ".".join(sub.split(".")[:-1])
+                whole = Part.getShape(obj, pre + "." if pre else "",
                                       needSubElement=False, noElementMap=True)
                 outer = shape.OuterWire.Edges
                 for e in shape.Edges:

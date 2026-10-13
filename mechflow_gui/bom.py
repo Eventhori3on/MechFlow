@@ -83,6 +83,8 @@ def rows(asm):
     for o in asm.Group:
         if o.TypeId in SKIP_TYPES or any(o.isDerivedFrom(t) for t in SKIP_TYPES[:4]):
             continue
+        if type(getattr(o, "Proxy", None)).__name__ in ("Joint", "GroundedJoint", "ViewProviderJoint"):
+            continue                      # mates are not parts
         if getattr(o, "Visibility", True) is False and not _is_fastener(o) \
                 and not _is_std(o) and o.TypeId != "App::Link":
             continue

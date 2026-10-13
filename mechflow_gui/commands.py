@@ -83,45 +83,71 @@ class MassProperties:
         }
 
     def Activated(self):
+        from mechflow_gui import material
         sel = Gui.Selection.getSelection()
-        shape = getattr(sel[0], "Shape", None) if sel else None
-        if shape is None or shape.isNull() or not shape.Solids:
+        if not sel:
+            doc = App.ActiveDocument
+            asm = None
+            try:
+                asm = Gui.ActiveDocument.ActiveView.getActiveObject("part")
+            except Exception:
+                pass
+            sel = [asm] if asm is not None else [
+                o for o in doc.Objects if o.TypeId == "PartDesign::Body" and not o.InList]
+        items = material.mass_items(sel)
+        if not items:
             QtWidgets.QMessageBox.information(
                 Gui.getMainWindow(), "Mass Properties",
-                "Select a body or solid feature first.")
+                "Select a body, weldment, part or assembly first.")
             return
-
-        from mechflow_gui import material
-        mat, density = material.get(sel[0])
-        if density is None:
+        if any(d is None for _l, _s, _m, d in items):
             density, ok = QtWidgets.QInputDialog.getDouble(
                 Gui.getMainWindow(), "Mass Properties",
-                "No material set (use Edit Material to set one).\n"
-                "Density (kg/m³) — e.g. steel 7850, aluminium 2700:",
+                "Some parts have no material (use Edit Material to set one).\n"
+                "Density (kg/m³) for those — e.g. steel 7850, aluminium 2700:",
                 7850.0, 0.0, 100000.0, 1)
             if not ok:
                 return
-            mat = "Not set"
-
-        vol_mm3 = shape.Volume
-        mass_kg = vol_mm3 * 1e-9 * density
-        com = shape.Solids[0].CenterOfMass if len(shape.Solids) == 1 \
-            else _combined_com(shape.Solids)
-
-        text = (
-            f"Object: {sel[0].Label}\n\n"
-            f"Material: {mat}\n"
-            f"Density: {density:g} kg/m³\n"
-            f"Mass: {mass_kg:.4f} kg\n"
-            f"Volume: {vol_mm3:,.2f} mm³\n"
-            f"Surface area: {shape.Area:,.2f} mm²\n\n"
-            f"Centre of mass (mm):\n"
-            f"  X = {com.x:.3f}\n  Y = {com.y:.3f}\n  Z = {com.z:.3f}"
-        )
+            items = [(l, s_, m or "Not set", d if d is not None else density)
+                     for l, s_, m, d in items]
+        text = mass_report(items, sel)
         QtWidgets.QMessageBox.information(Gui.getMainWindow(), "Mass Properties", text)
 
     def IsActive(self):
         return App.ActiveDocument is not None
+
+
+def mass_summary(items):
+    """(mass kg, volume mm3, area mm2, centre of mass, materials) of
+    material.mass_items output."""
+    mass = vol = area = 0.0
+    m = App.Vector()
+    mats = []
+    for _l, sh, mat, d in items:
+        for so in sh.Solids:
+            kg = so.Volume * 1e-9 * d
+            mass += kg; vol += so.Volume; area += so.Area
+            m += so.CenterOfMass * kg
+        if mat not in mats:
+            mats.append(mat)
+    com = m * (1.0 / mass) if mass > 0 else App.Vector()
+    return mass, vol, area, com, mats
+
+
+def mass_report(items, sel):
+    mass, vol, area, com, mats = mass_summary(items)
+    name = sel[0].Label if len(sel) == 1 else f"{len(sel)} objects"
+    parts = f" ({len(items)} solids)" if len(items) > 1 else ""
+    dens = ""
+    if len(items) == 1:
+        dens = f"Density: {items[0][3]:g} kg/m³\n"
+    return (f"Object: {name}{parts}\n\n"
+            f"Material: {', '.join(mats)}\n{dens}"
+            f"Mass: {mass:.4f} kg\n"
+            f"Volume: {vol:,.2f} mm³\n"
+            f"Surface area: {area:,.2f} mm²\n\n"
+            f"Centre of mass (mm):\n"
+            f"  X = {com.x:.3f}\n  Y = {com.y:.3f}\n  Z = {com.z:.3f}")
 
 
 def _combined_com(solids):
