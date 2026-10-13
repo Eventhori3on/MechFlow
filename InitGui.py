@@ -85,6 +85,8 @@ class MechFlowWorkbench(Gui.Workbench):
                                      "Separator", "MechFlow_NewAssembly",
                                      "MechFlow_InsertComponents", "MechFlow_Mate",
                                      "MechFlow_Toolbox", "MechFlow_SmartFasteners", "MechFlow_BOM",
+                                     "Separator", "MechFlow_StructuralMember",
+                                     "MechFlow_CutList",
                                      "Separator", "MechFlow_MakeDrawing",
                                      "MechFlow_Standard3View", "MechFlow_SheetFormat",
                                      "MechFlow_SavePDF",

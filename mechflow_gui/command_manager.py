@@ -93,6 +93,12 @@ TABS = [
                    ("Fix", "Sketcher_ConstrainBlock")]),
         ("Repair\nSketch", "Sketcher_ValidateSketch"),
     ]),
+    ("Weldments", [
+        ("Sketch", "MechFlow_SketchToggle"),
+        ("Structural\nMember", "MechFlow_StructuralMember"),
+        None,
+        ("Cut List", "MechFlow_CutList"),
+    ]),
     ("Evaluate", [
         ("Measure", "Std_Measure"),
         ("Mass\nProperties", "MechFlow_MassProperties"),

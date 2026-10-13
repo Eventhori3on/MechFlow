@@ -61,6 +61,18 @@ Each feature has its own panel, and you edit it again by double-clicking.
 - The Sketch tab has the full set: Centre Rectangle, 3 Point Arc, Sketch
   Chamfer, Extend/Split, Move/Copy/Scale, Repair Sketch.
 
+### Weldments
+- **Structural Member** (Weldments tab): pick sketch lines - from one sketch
+  or several, so 3D frames work - and a section: UKB, UKC, PFC, equal angle,
+  SHS / RHS (hot finished EN 10210 or cold formed EN 10219) or CHS, in UK
+  sizes. Corners are cut with **End miter**, **End butt 1** or **End butt
+  2**; a member that ends on the side of another (a cross rail, a post) is cut
+  square to its face. Rotate or mirror the profile; double-click to edit.
+- **Cut List:** members grouped by section and length, with the cut angles,
+  saved as a spreadsheet.
+
+![Weldment frames](docs/screenshots/weldments.png)
+
 ### Drawings
 - **Make Drawing from Part:** pick a sheet (ISO A4–A0, ANSI A–D) and get a
   standard 3 view plus an isometric, at a standard scale that fits the sheet.
@@ -144,6 +156,9 @@ FreeCAD's, so a few things work differently:
   fastener is attached to its hole edge rather than held by mates, and only
   metric (ISO 273) holes are sized automatically; for inch fasteners pick the
   size yourself.
+- Weldment members follow straight sketch lines (no curved members yet).
+  Section dimensions come from British Steel datasheets and EN 10056-1 /
+  10210 / 10219 (see `mechflow_gui/steel_data.py`).
 - MechFlow is tested on **FreeCAD 1.1**. Older versions are not supported.
 
 ## Install

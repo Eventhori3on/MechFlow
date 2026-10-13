@@ -655,6 +655,13 @@ def register():
         "Toolbox", "Standard parts (ISO, DIN, ASME screws, nuts, washers, pins): pick one "
         "and click holes - it sizes itself to each hole", icon_path("Toolbox.svg"),
         lambda: _run("toolbox", "toolbox"), lambda: True))
+    Gui.addCommand("MechFlow_StructuralMember", _simple(
+        "Structural Member", "Steel sections (UKB, UKC, PFC, angle, SHS, RHS, CHS) along "
+        "sketch lines, cut at the corners", icon_path("StructuralMember.svg"),
+        lambda: _run("weldments", "structural_member"), lambda: True))
+    Gui.addCommand("MechFlow_CutList", _simple(
+        "Cut List", "Weldment cut list: members by section and length, with cut angles",
+        icon_path("CutList.svg"), lambda: _run("weldments", "cut_list"), lambda: True))
     Gui.addCommand("MechFlow_SmartFasteners", _simple(
         "Smart Fasteners", "Fill every empty clearance and tapped hole with the right "
         "screw - through several parts at once", icon_path("SmartFasteners.svg"),
