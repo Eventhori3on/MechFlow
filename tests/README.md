@@ -18,6 +18,7 @@ pops up an unexpected dialog.
 | `t_rel` | Sketch Relations panel and Under / Fully / Over Defined status |
 | `t_tab` | Sketch tab and the Display/Delete Relations toggle |
 | `t_draw` | Make Drawing from Part (ISO and ANSI), title block, Sheet Format, PDF |
+| `t_splash` | MechFlow splash screen: set, restore after a FreeCAD reinstall, restore FreeCAD's, leave other branding alone (writes `branding.xml` in the test FreeCAD) |
 | `t_asm` | New Assembly, Insert Components, Mate (Concentric, Coincident, Distance, flip, cancel), Interference Detection |
 
 ## Running

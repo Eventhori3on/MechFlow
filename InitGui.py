@@ -49,6 +49,14 @@ class MechFlowWorkbench(Gui.Workbench):
         step("quiet tree selection", feature_highlight.install)
         from mechflow_gui import sketch_status
         step("sketch colour check", sketch_status.restore_after_crash)
+        # After a FreeCAD update the splash branding file is gone: offer to
+        # put it back, once FreeCAD has finished starting.
+        try:
+            from PySide6 import QtCore
+        except ImportError:
+            from PySide2 import QtCore
+        from mechflow_gui import splash
+        QtCore.QTimer.singleShot(5000, lambda: step("splash check", splash.check_at_startup))
 
         # Own commands live in the CommandManager and the MechFlow menu,
         # not a separate toolbar row.
@@ -81,7 +89,9 @@ class MechFlowWorkbench(Gui.Workbench):
                                      "MechFlow_ToggleCommandManager",
                                      "MechFlow_ToggleProperties",
                                      "MechFlow_RenameOriginPlanes",
-                                     "MechFlow_ToggleToolbars", "MechFlow_ToggleTheme"])
+                                     "MechFlow_ToggleToolbars", "MechFlow_ToggleTheme",
+                                     "Separator", "MechFlow_InstallSplash",
+                                     "MechFlow_RestoreSplash"])
 
     def Activated(self):
         import FreeCAD as App

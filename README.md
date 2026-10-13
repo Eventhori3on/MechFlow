@@ -23,6 +23,10 @@ get a layout, tool names and dialogs that work the way you're used to.
 - Floating heads-up view bar (you can drag it), **Normal To** (Ctrl+8), S-key
   shortcut bar, confirmation corner in sketches, light theme.
 - Front/Top/Right planes you can hover, click and right-click → Sketch.
+- Optional **MechFlow splash screen** (*MechFlow → Use MechFlow Splash
+  Screen*). FreeCAD reads its splash from a small `branding.xml` next to the
+  FreeCAD program, so on Windows this asks once for administrator permission.
+  Updating FreeCAD removes the file; MechFlow then offers to put it back.
 
 ### Part modelling
 Each feature has its own panel, and you edit it again by double-clicking.

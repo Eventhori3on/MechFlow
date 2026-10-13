@@ -641,6 +641,12 @@ def register():
     ):
         Gui.addCommand("MechFlow_" + name, _simple(
             menu, tip, pix, (lambda f=fn: _run("assembly", f)), lambda: True))
+    Gui.addCommand("MechFlow_InstallSplash", _simple(
+        "Use MechFlow Splash Screen", "Show the MechFlow splash screen when FreeCAD starts",
+        icon_path("MechFlow.svg"), lambda: _run("splash", "install"), lambda: True))
+    Gui.addCommand("MechFlow_RestoreSplash", _simple(
+        "Restore FreeCAD Splash Screen", "Go back to FreeCAD's own splash screen",
+        "freecad", lambda: _run("splash", "restore"), lambda: True))
     Gui.addCommand("MechFlow_Relations", _simple(
         "Display/Delete Relations", "Show or hide the Relations panel: add relations to "
         "the selected sketch entities, see and delete existing ones",
