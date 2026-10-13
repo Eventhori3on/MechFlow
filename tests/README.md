@@ -18,6 +18,7 @@ pops up an unexpected dialog.
 | `t_rel` | Sketch Relations panel and Under / Fully / Over Defined status |
 | `t_tab` | Sketch tab and the Display/Delete Relations toggle |
 | `t_cpat` | Circular Sketch Pattern: preview, instances, cancel, OK (fully defined, follows the seed), one undo, reverse / non-equal spacing |
+| `t_lpat` | Linear Sketch Pattern: one direction and a grid, direction picked from a line, reverse, cancel, OK (fully defined, follows the seed), one undo |
 | `t_draw` | Make Drawing from Part (ISO and ANSI), title block, Sheet Format, PDF |
 | `t_splash` | MechFlow splash screen: set, restore after a FreeCAD reinstall, restore FreeCAD's, leave other branding alone (writes `branding.xml` in the test FreeCAD) |
 | `t_hole` | Hole Wizard sizes: ISO 273 clearance (close / normal / loose), counterbore, tapped, blind, re-edit |

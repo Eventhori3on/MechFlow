@@ -641,6 +641,11 @@ def register():
     ):
         Gui.addCommand("MechFlow_" + name, _simple(
             menu, tip, pix, (lambda f=fn: _run("assembly", f)), lambda: True))
+    Gui.addCommand("MechFlow_LinearSketchPattern", _simple(
+        "Linear Sketch Pattern", "Copy sketch entities in a row or a grid "
+        "(direction, spacing, instances)", "Sketcher_RectangularArray",
+        lambda: _run("sketch_pattern", "linear_sketch_pattern"),
+        lambda: __import__("mechflow_gui.sketch_status", fromlist=["x"]).sketch_in_edit() is not None))
     Gui.addCommand("MechFlow_CircularSketchPattern", _simple(
         "Circular Sketch Pattern", "Copy sketch entities around a centre point "
         "(instances, angle, equal spacing)", "Sketcher_Rotate",

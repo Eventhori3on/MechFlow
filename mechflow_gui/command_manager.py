@@ -78,7 +78,7 @@ TABS = [
                    ("Intersection Curve", "Sketcher_Intersection")]),
         None,
         ("stack", [("Mirror Entities", "Sketcher_Symmetry"),
-                   ("Linear Sketch Pattern", "Sketcher_RectangularArray"),
+                   ("Linear Sketch Pattern", "MechFlow_LinearSketchPattern"),
                    ("Circular Sketch Pattern", "MechFlow_CircularSketchPattern")]),
         ("stack", [("Move Entities", "Sketcher_Translate"),
                    ("Copy Entities", "Sketcher_Copy"),
