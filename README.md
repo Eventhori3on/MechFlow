@@ -90,8 +90,11 @@ Each feature has its own panel, and you edit it again by double-clicking.
     tees, concentric reducers and caps.
   - **Bearings:** ISO 15 deep groove ball bearings, 60xx, 62xx and 63xx.
   - Click a pipe end and a flange or fitting sizes itself to the pipe; click
-    a flange face for a blind flange; click a shaft end or housing bore for a
-    bearing. Change size or rating later in the properties.
+    a shaft end or housing bore for a bearing. Change size or rating later in
+    the properties.
+  - **Flange joints:** click a flange's face to bolt another flange (or a
+    blind) to it: it turns to face it, with a gasket (EN 1514-1 IBC / ASME
+    B16.21) and the bolts and nuts from the flange table.
   - **Fasteners:** ISO, DIN, EN and ASME screws, nuts, washers, pins and
     more. Click hole edges (or a face, for all its holes) and each one sizes
     itself to its hole: a 9 mm clearance hole gets M8, a 5 mm tapped hole
@@ -106,6 +109,11 @@ Each feature has its own panel, and you edit it again by double-clicking.
 
   ![Toolbox fasteners in Hole Wizard holes](docs/screenshots/toolbox.png)
 
+- **Smart Fasteners:** one click fills every empty clearance and tapped hole
+  with the right screw, including holes that line up through several parts:
+  into a tapped hole it engages up to 1.5 x d, right through it adds a washer
+  and nut. Counterbores get socket head cap screws, countersinks countersunk
+  screws; change the type per group before OK.
 - **Bill of Materials** with ITEM NO. / PART NUMBER / DESCRIPTION / QTY.,
   counting identical parts and fasteners together.
 - **Interference Detection** and Exploded View.

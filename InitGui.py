@@ -84,7 +84,7 @@ class MechFlowWorkbench(Gui.Workbench):
                                      "MechFlow_RollBack", "MechFlow_RollToEnd",
                                      "Separator", "MechFlow_NewAssembly",
                                      "MechFlow_InsertComponents", "MechFlow_Mate",
-                                     "MechFlow_Toolbox", "MechFlow_BOM",
+                                     "MechFlow_Toolbox", "MechFlow_SmartFasteners", "MechFlow_BOM",
                                      "Separator", "MechFlow_MakeDrawing",
                                      "MechFlow_Standard3View", "MechFlow_SheetFormat",
                                      "MechFlow_SavePDF",

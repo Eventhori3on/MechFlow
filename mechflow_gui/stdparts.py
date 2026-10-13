@@ -27,6 +27,8 @@ TYPES = {
     "ASMEB16.5-WN": ("Flanges", "ASME", "ASME B16.5  Weld neck flange RF", "Weld neck flange RF"),
     "ASMEB16.5-SO": ("Flanges", "ASME", "ASME B16.5  Slip-on flange RF", "Slip-on flange RF"),
     "ASMEB16.5-BL": ("Flanges", "ASME", "ASME B16.5  Blind flange RF", "Blind flange RF"),
+    "EN1514-1-IBC": ("Flanges", "EN", "EN 1514-1  Flat gasket (IBC)", "Flat gasket"),
+    "ASMEB16.21": ("Flanges", "ASME", "ASME B16.21  Flat ring gasket", "Flat ring gasket"),
     "EN10220-PIPE": ("Pipe", "EN", "EN 10220  Steel pipe (ISO 4200 sizes)", "Steel pipe"),
     "ASMEB36.10-PIPE": ("Pipe", "ASME", "ASME B36.10M  Steel pipe", "Steel pipe"),
     "ASMEB16.9-90LR": ("Pipe Fittings", "ASME", "ASME B16.9  90° long radius elbow", "90 deg LR elbow"),
@@ -72,7 +74,7 @@ def _reductions():
 
 
 def sizes(t):
-    if t.startswith("EN1092"):
+    if t.startswith("EN1092") or t.startswith("EN1514"):
         return [f"DN{dn}" for dn in T.EN_PN16]
     if t == "EN10220-PIPE":
         return [f"DN{dn}" for dn in T.EN_PN16]
@@ -86,9 +88,9 @@ def sizes(t):
 
 
 def ratings(t):
-    if t.startswith("EN1092"):
+    if t.startswith("EN1092") or t.startswith("EN1514"):
         return list(T.EN_FLANGES.keys())
-    if t.startswith("ASMEB16.5"):
+    if t.startswith("ASMEB16.5") or t == "ASMEB16.21":
         return list(T.ASME_FLANGES.keys())
     if t.startswith("ASMEB36.10") or t.startswith("ASMEB16.9"):
         return list(T.SCHEDULES)
@@ -145,6 +147,10 @@ def designation(t, size, rating, length=None):
         return f"{kind} {nps_label(size)} {rating} ASME B16.9"
     if t.startswith("ISO15-"):
         return f"{size} ISO 15"
+    if t == "EN1514-1-IBC":
+        return f"Gasket EN 1514-1 IBC {size} {rating} 2 mm"
+    if t == "ASMEB16.21":
+        return f"Gasket ASME B16.21 {nps_label(size)} {rating} 1/8in"
     return f"{t} {size}"
 
 
@@ -186,10 +192,10 @@ def match_size(t, rating, diameter, tol=0.6):
         if t.startswith("ISO15-"):
             d, D, _B, _r = T.BEARINGS[t[-2:]][s]
             cands = [d, D]
-        elif t in ("EN1092-1-05",):
+        elif t in ("EN1092-1-05", "EN1514-1-IBC"):
             f = en_flange(s, rating)
             cands = [f["D"], f["d1"]]
-        elif t == "ASMEB16.5-BL":
+        elif t in ("ASMEB16.5-BL", "ASMEB16.21"):
             f = T.ASME_FLANGES.get(rating, T.ASME_150)[_nps(s)]
             cands = [f["O"] * IN, f["R"] * IN]
         else:
@@ -285,6 +291,9 @@ def shape_for(t, size, rating, length=1000.0):
         body = _revolve([(0, 0), (R / 2, 0), (R / 2, rf), (O / 2, rf), (O / 2, rf + Tt),
                          (0, rf + Tt)])
         return _clean(_bolt_holes(body, n, g["hole"], g["BC"], rf, rf + Tt))
+    if t in ("EN1514-1-IBC", "ASMEB16.21"):
+        od, i_d, th = gasket_dims(t, size, rating)
+        return _ring(od / 2, i_d / 2, 0, th)
     if t == "EN10220-PIPE":
         od, wall = en_pipe(size)
         return _ring(od / 2, od / 2 - wall, 0, length)
@@ -495,10 +504,211 @@ def make(container, t, size, rating, length=1000.0, attach=None):
     return o
 
 
-def place(container, t, obj, sub, size=None, rating=None, length=1000.0):
-    """Insert a standard part on a round edge, sized to it unless a size is
-    given. Returns the new object."""
+# ---------------------------------------------------------------- joints
+
+def is_flange(t):
+    return t.startswith("EN1092") or t.startswith("ASMEB16.5")
+
+
+def is_gasket(t):
+    return t in ("EN1514-1-IBC", "ASMEB16.21")
+
+
+def family(t):
+    return "EN" if t.startswith("EN") else "ASME"
+
+
+def gasket_dims(t, size, rating):
+    """(OD, ID, thickness) of a flat inside-bolt-circle gasket: OD to the
+    bolts, ID to the pipe (EN 1514-1 IBC / ASME B16.21 sizes)."""
+    if t.startswith("EN"):
+        f = en_flange(size, rating)
+        return f["K"] - f["L"], round(f["A"] + 0.7, 1), 2.0
+    f = T.ASME_FLANGES.get(rating, T.ASME_150)[_nps(size)]
+    return (f["BC"] - f["hole"] + 0.125) * IN, f["H"] * IN, 0.125 * IN
+
+
+def flange_info(t, size, rating):
+    """Bolting data of a flange: thickness at the bolts (back to joint
+    face), bolt circle, hole, number, bolt size, face diameter, OD."""
+    if t.startswith("EN"):
+        f = en_flange(size, rating)
+        typ = t.split("-")[-1]
+        th = f["C1"] if typ == "01" else f["C2"]
+        return dict(thick=th, K=f["K"], L=f["L"], n=f["n"], bolt=f["bolt"],
+                    face=f["d1"] if typ != "01" else f["D"], OD=f["D"])
+    f = T.ASME_FLANGES.get(rating, T.ASME_150)[_nps(size)]
+    bolt_in = f["hole"] - 0.125
+    return dict(thick=(f["T"] + 0.06) * IN, K=f["BC"] * IN, L=f["hole"] * IN, n=f["n"],
+                bolt=_inch_name(bolt_in), face=f["R"] * IN, OD=f["O"] * IN)
+
+
+def _inch_name(x):
+    whole = int(x + 1e-6)
+    frac = x - whole
+    for den in (2, 4, 8, 16):
+        num = round(frac * den)
+        if abs(num / den - frac) < 1e-3:
+            if num == 0:
+                return f"{whole}in"
+            from math import gcd
+            g = gcd(num, den)
+            fr = f"{num // g}/{den // g}"
+            return f"{whole} {fr}in" if whole else f"{fr}in"
+    return f"{x:g}in"
+
+
+def _inch_value(s):
+    s = s.replace("in", "").strip()
+    total = 0.0
+    for part in s.split():
+        if "/" in part:
+            a, b = part.split("/")
+            total += float(a) / float(b)
+        else:
+            total += float(part)
+    return total
+
+
+def joint_with(obj, sub, t):
+    """If the picked edge is the face (raised face or OD) of a MechFlow
+    flange, return that flange - the new part bolts to it."""
     import Part
+    if not (is_flange(t) or is_gasket(t)) or obj is None or not is_std_object(obj):
+        return None
+    if not is_flange(obj.StdType) or family(obj.StdType) != family(t):
+        return None
+    try:
+        e = Part.getShape(obj, sub, needSubElement=True, noElementMap=True)
+        d = 2 * e.Curve.Radius
+    except Exception:
+        return None
+    info = flange_info(obj.StdType, obj.Size, obj.Rating)
+    if min(abs(d - info["face"]), abs(d - info["OD"])) > 0.6:
+        return None
+    return obj
+
+
+def _face_frame(base):
+    """(point on the joint face, direction out of the face) of a placed
+    flange, from its own axes."""
+    pl = base.Placement
+    t = base.StdType
+    rating = base.Rating
+    if t.startswith("EN1092"):
+        f = en_flange(base.Size, rating)
+        typ = t.split("-")[-1]
+        z = {"11": f["H2"], "01": 0.0, "05": 0.0}[typ]
+        up = -1.0 if typ == "05" else 1.0
+    else:
+        g = T.ASME_FLANGES.get(rating, T.ASME_150)[_nps(base.Size)]
+        kind = t.split("-")[-1]
+        z = {"WN": (g["L2"] + 0.06) * IN, "SO": 0.0, "BL": 0.0}[kind]
+        up = -1.0 if kind == "BL" else 1.0
+    n = pl.Rotation.multVec(V(0, 0, up))
+    return pl.multVec(V(0, 0, z)), n
+
+
+def _length_in_part(t, size, rating):
+    """How far the part runs from its own z=0 to its joint face."""
+    if t.startswith("EN1092"):
+        f = en_flange(size, rating)
+        return f["H2"] if t.endswith("-11") else 0.0
+    if t.startswith("ASMEB16.5"):
+        g = T.ASME_FLANGES.get(rating, T.ASME_150)[_nps(size)]
+        return (g["L2"] + 0.06) * IN if t.endswith("-WN") else 0.0
+    return 0.0
+
+
+def _hole_edges(obj, centre, normal, radius, back):
+    """Bolt-hole circle edges of a flange, on its back face (the face
+    farthest from the joint when back=True)."""
+    import Part
+    sh = obj.Shape
+    holes = {}
+    for i, e in enumerate(sh.Edges):
+        c = getattr(e, "Curve", None)
+        if type(c).__name__ != "Circle" or abs(c.Radius - radius) > 1e-3:
+            continue
+        d = c.Center - centre
+        ax = d.dot(normal)
+        radial = d - normal * ax
+        key = (round(radial.x, 1), round(radial.y, 1), round(radial.z, 1))
+        cur = holes.get(key)
+        if cur is None or (ax < cur[1] if back else ax > cur[1]):
+            holes[key] = (f"Edge{i + 1}", ax)
+    return [v[0] for v in holes.values()]
+
+
+def bolt_set(container, base, mate, gap):
+    """Bolts through two flanges (heads on the base's back), nuts on the
+    mate's back. Needs the Fasteners Workbench. Returns the objects."""
+    from mechflow_gui import toolbox
+    if toolbox.fasteners() is None:
+        return []
+    info = flange_info(base.StdType, base.Size, base.Rating)
+    minfo = flange_info(mate.StdType, mate.Size, mate.Rating)
+    face, n = _face_frame(base)
+    metric = family(base.StdType) == "EN"
+    bolt = info["bolt"]
+    if metric:
+        d = float(bolt[1:])
+        nut_h = 0.8 * d
+        pitch = toolbox.METRIC.get(bolt, (d, 0.15 * d))[1]
+        btype, ntype = "ISO4014", "ISO4032"
+        names = toolbox.diameters(btype)
+        bname = bolt if bolt in names else f"({bolt})"
+        nname = bname
+    else:
+        d = _inch_value(bolt) * IN
+        nut_h = 0.875 * d
+        pitch = d / 8
+        btype, ntype = "ASMEB18.2.1.6", "ASMEB18.2.2.4A"
+        bname = nname = bolt
+    grip = info["thick"] + gap + minfo["thick"]
+    need = grip + nut_h + 2 * pitch
+    length = _pick(btype, bname, need, metric)
+    if length is None and metric:
+        btype = "ISO4017"
+        length = _pick(btype, bname, need, metric)
+    made = []
+    for sub in _hole_edges(base, face, n, info["L"] / 2, back=True):
+        made.append(toolbox.make(container, btype, (base, [sub]), bname, length,
+                                 invert=toolbox._outward(base, sub) is False))
+    mface = face + n * gap
+    for sub in _hole_edges(mate, mface, n, minfo["L"] / 2, back=False):
+        made.append(toolbox.make(container, ntype, (mate, [sub]), nname,
+                                 invert=toolbox._outward(mate, sub) is False))
+    return made
+
+
+def _pick(btype, bname, need, metric):
+    from mechflow_gui import toolbox
+    opts = toolbox.lengths(btype, bname)
+    nums = []
+    for o in opts:
+        try:
+            v = float(o) if metric else _inch_value(o) * IN
+        except ValueError:
+            continue
+        nums.append((v, o))
+    nums.sort()
+    for v, o in nums:
+        if v >= need - 1e-6:
+            return o
+    return None
+
+
+def place(container, t, obj, sub, size=None, rating=None, length=1000.0, joint=True):
+    """Insert a standard part on a round edge, sized to it unless a size is
+    given. On another flange's face it makes a joint: the new flange faces
+    it across a gasket, with bolts and nuts (joint=True). Returns the new
+    objects."""
+    import Part
+    base = joint_with(obj, sub, t)
+    if base is not None:
+        size, rating = base.Size, base.Rating
+        return _place_joint(container, t, base, sub, size, rating, joint)
     rating = rating or default_rating(t)
     if size is None and obj is not None:
         try:
@@ -508,4 +718,50 @@ def place(container, t, obj, sub, size=None, rating=None, length=1000.0):
             size = None
     size = size or default_size(t)
     attach = (obj, [sub]) if obj is not None else None
-    return make(container, t, size, rating, length, attach)
+    return [make(container, t, size, rating, length, attach)]
+
+
+def _place_joint(container, t, base, sub, size, rating, with_bolts):
+    gt = "EN1514-1-IBC" if family(t) == "EN" else "ASMEB16.21"
+    gap = gasket_dims(gt, size, rating)[2]
+    made = []
+    attach = (base, [sub])
+    if is_gasket(t):
+        g = make(container, t, size, rating, attach=attach)
+        _seat_on_face(g, base, 0.0, flip=False)
+        return [g]
+    if with_bolts:
+        g = make(container, gt, size, rating, attach=attach)
+        _seat_on_face(g, base, 0.0, flip=False)
+        made.append(g)
+    else:
+        gap = 0.0
+    mate = make(container, t, size, rating, attach=attach)
+    blind = t.endswith("-05") or t.endswith("-BL")
+    # blind flanges already face down onto the joint; others turn round
+    _seat_on_face(mate, base, gap + (0 if blind else _length_in_part(t, size, rating)),
+                  flip=not blind)
+    made.append(mate)
+    if with_bolts:
+        mate.Document.recompute()
+        made += bolt_set(container, base, mate, gap)
+    return made
+
+
+def _seat_on_face(obj, base, dist, flip):
+    """Put a part on a flange's joint face (whichever edge was picked):
+    Offset along the face normal, turned round if flip."""
+    face, n = _face_frame(base)
+    c, ax = _edge_frame(obj.BaseObject[0], obj.BaseObject[1][0])
+    # the picked edge may sit below the face (an OD edge): measure from it
+    shift = (face - c).dot(ax)
+    if ax.dot(n) < 0:
+        obj.Invert = not obj.Invert
+        shift = -shift
+        ax = ax * -1
+    if flip:
+        obj.Invert = not obj.Invert
+        obj.Offset = -(shift + dist)
+    else:
+        obj.Offset = shift + dist
+    obj.Document.recompute()

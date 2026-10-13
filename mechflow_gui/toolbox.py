@@ -422,6 +422,37 @@ def _outward(obj, sub):
     return None
 
 
+def auto_length(ftype, hole, diam, ends=ENDS[0], offset=0.0):
+    """Standard screw length for a hole (see place)."""
+    nom, pitch = METRIC.get(diam, (8.0, 1.25))[:2]
+    grip = hole.grip if hole.grip is not None else 0.0
+    at_most = False
+    tapped_after = getattr(hole, "tapped_after", None)
+    if tapped_after is not None:
+        # Through clearance parts into a tapped part (Smart Fasteners):
+        # engage up to 1.5 x d, no deeper than the tapped hole.
+        depth = getattr(hole, "tapped_depth", None) or 1.5 * nom
+        target, at_most = tapped_after + offset + min(1.5 * nom, depth - pitch), True
+    elif hole.kind == "tapped" and not hole.through:
+        # Straight into a blind tapped hole: as long as the hole allows.
+        target = min(1.5 * nom, hole.depth - pitch) if hole.depth else 1.5 * nom
+        at_most = bool(hole.depth)
+    elif not hole.through and hole.grip:
+        # A blind hole: no longer than the hole.
+        target, at_most = hole.grip + offset, True
+    elif ends == ENDS[1] and hole.through:
+        target = grip + offset + 0.16 * nom + 0.8 * nom + 2 * pitch
+    elif ends == ENDS[2]:
+        target = grip + offset
+    else:
+        target = grip + offset + 1.5 * nom
+    if ftype in COUNTERSUNK:
+        # Countersunk lengths include the head: measure from the top.
+        g2 = hole.cs_grip if hole.cs_grip is not None else grip
+        target = max(target - grip + g2, 1.5 * nom)
+    return pick_length(ftype, diam, target, at_most)
+
+
 def place(container, ftype, hole, diam=None, length=None, washer_under_head=False,
           ends=ENDS[0]):
     """Insert a fastener (with washers / nut) in one hole. Returns the objects."""
@@ -443,33 +474,15 @@ def place(container, ftype, hole, diam=None, length=None, washer_under_head=Fals
         made.append(w)
     is_screw = hasattr_length(ftype)
     if is_screw and length is None:
-        grip = hole.grip if hole.grip is not None else 0.0
-        at_most = False
-        if hole.kind == "tapped" and not hole.through:
-            # Straight into a blind tapped hole: as long as the hole allows.
-            target = min(1.5 * nom, hole.depth) if hole.depth else 1.5 * nom
-            at_most = bool(hole.depth)
-        elif not hole.through and hole.grip:
-            # A blind hole: no longer than the hole.
-            target, at_most = hole.grip + offset, True
-        elif ends == ENDS[1] and hole.through:
-            target = grip + offset + 0.16 * nom + 0.8 * nom + 2 * pitch
-        elif ends == ENDS[2]:
-            target = grip + offset
-        else:
-            target = grip + offset + 1.5 * nom
-        if ftype in COUNTERSUNK:
-            # Countersunk lengths include the head: measure from the top.
-            g2 = hole.cs_grip if hole.cs_grip is not None else grip
-            target = max(target - grip + g2, 1.5 * nom)
-        length = pick_length(ftype, diam, target, at_most)
+        length = auto_length(ftype, hole, diam, ends, offset)
     s = make(container, ftype, (hole.obj, [seat]), diam, length, offset, inv)
     made.append(s)
     if ends == ENDS[1] and hole.through and hole.exit_sub and is_screw:
-        inv2 = _outward(hole.obj, hole.exit_sub) is False
-        w2 = make(container, WASHER, (hole.obj, [hole.exit_sub]), diam, invert=inv2)
+        xobj = getattr(hole, "exit_obj", None) or hole.obj
+        inv2 = _outward(xobj, hole.exit_sub) is False
+        w2 = make(container, WASHER, (xobj, [hole.exit_sub]), diam, invert=inv2)
         made.append(w2)
-        made.append(make(container, NUT, (hole.obj, [hole.exit_sub]), diam,
+        made.append(make(container, NUT, (xobj, [hole.exit_sub]), diam,
                          offset=_thickness(w2, axis), invert=inv2))
     return made
 
@@ -613,6 +626,11 @@ class ToolboxPanel:
         form.addRow("Ends in", self.ends)
         self.washer = QtWidgets.QCheckBox("Washer under the head")
         form.addRow("", self.washer)
+        self.joint = QtWidgets.QCheckBox("Gasket, bolts and nuts")
+        self.joint.setChecked(True)
+        self.joint.setToolTip("On another flange's face: add a gasket between them and bolt "
+                              "them together (bolts need the Fasteners Workbench)")
+        form.addRow("Joint", self.joint)
         root.addLayout(form)
 
         hb = QtWidgets.QGroupBox("Holes")
@@ -712,6 +730,7 @@ class ToolboxPanel:
             self.rating.setCurrentText(stdparts.default_rating(t))
         self._row(self.rating, std and self.rating.count() > 0)
         self._row(self.pipe_length, std and stdparts.has_length(t))
+        self._row(self.joint, std and stdparts.is_flange(t))
         for w in (self.length, self.ends, self.washer):
             self._row(w, not std)
         self.hole_box.setTitle("Edges" if std else "Holes")
@@ -722,8 +741,8 @@ class ToolboxPanel:
         self._refresh_holes()
         if std:
             cat = stdparts.TYPES[t][0]
-            hint = {"Flanges": "Click a pipe end (its outside edge) - or a flange's edge for a "
-                               "blind flange.",
+            hint = {"Flanges": "Click a pipe end (its outside edge), or a flange's face edge to "
+                               "bolt another flange (or a blind) to it.",
                     "Pipe": "Click the end of a flange or fitting to carry on from it.",
                     "Pipe Fittings": "Click a pipe end to fit it there.",
                     "Bearings": "Click a shaft end or a housing bore edge."}[cat]
@@ -787,6 +806,11 @@ class ToolboxPanel:
                 try:
                     e = Part.getShape(h.obj, h.sub, needSubElement=True, noElementMap=True)
                     d = 2 * e.Curve.Radius
+                    base = stdparts.joint_with(h.obj, h.sub, t)
+                    if base is not None:
+                        self.hole_list.addItem(
+                            f"{base.Label}: face \u2192 joint, {base.Size} {base.Rating}")
+                        continue
                     size = stdparts.match_size(t, self.rating.currentText()
                                                or stdparts.default_rating(t), d)
                     text = f"Ø{d:.2f} edge" + (f" → {size}" if size else
@@ -848,10 +872,10 @@ class ToolboxPanel:
         try:
             if self.holes:
                 for h in self.holes:
-                    made.append(stdparts.place(self.container, t, h.obj, h.sub, size, rating,
-                                               length))
+                    made += stdparts.place(self.container, t, h.obj, h.sub, size, rating,
+                                           length, joint=self.joint.isChecked())
             else:
-                made.append(stdparts.place(self.container, t, None, None, size, rating, length))
+                made += stdparts.place(self.container, t, None, None, size, rating, length)
             doc.commitTransaction()
         except Exception as e:
             doc.abortTransaction()

@@ -50,7 +50,7 @@ def acc(tag):
         p.accept()
         for o in p.made:
             bb = o.Shape.BoundBox
-            log(f"  {tag}: {o.Label} | size {o.Size} rating {o.Rating} | valid {o.Shape.isValid()} | x {bb.XMin:.1f}..{bb.XMax:.1f} z {bb.ZMin:.1f}..{bb.ZMax:.1f} | centre ({bb.Center.x:.1f},{bb.Center.y:.1f})")
+            log(f"  {tag}: {o.Label} | size {getattr(o, 'Size', '-')} rating {getattr(o, 'Rating', '-')} | valid {o.Shape.isValid()} | x {bb.XMin:.1f}..{bb.XMax:.1f} z {bb.ZMin:.1f}..{bb.ZMax:.1f} | centre ({bb.Center.x:.1f},{bb.Center.y:.1f})")
             S[tag] = o
     return f
 # weld neck flange on the pipe top

@@ -655,6 +655,10 @@ def register():
         "Toolbox", "Standard parts (ISO, DIN, ASME screws, nuts, washers, pins): pick one "
         "and click holes - it sizes itself to each hole", icon_path("Toolbox.svg"),
         lambda: _run("toolbox", "toolbox"), lambda: True))
+    Gui.addCommand("MechFlow_SmartFasteners", _simple(
+        "Smart Fasteners", "Fill every empty clearance and tapped hole with the right "
+        "screw - through several parts at once", icon_path("SmartFasteners.svg"),
+        lambda: _run("smart_fasteners", "smart_fasteners"), lambda: True))
     Gui.addCommand("MechFlow_BOM", _simple(
         "Bill of Materials", "Bill of Materials for the assembly: identical parts and "
         "fasteners counted together", icon_path("BOM.svg"),

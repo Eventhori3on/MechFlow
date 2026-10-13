@@ -24,6 +24,8 @@ pops up an unexpected dialog.
 | `t_hole` | Hole Wizard sizes: ISO 273 clearance (close / normal / loose), counterbore, tapped, blind, re-edit |
 | `t_toolbox` | Toolbox: hole recognition (clearance, tapped, counterbore, countersink), seating, lengths, washer + nut, labels, assembly (follows the part), Bill of Materials. Needs the Fasteners Workbench; skipped without it |
 | `t_stdparts` | Toolbox standard parts: EN weld neck and blind flanges, ASME slip-on, 90 deg elbow and bearings placed on edges and sized to them, pipe at the origin, rating change, parts follow a moved part, BOM names, save and reopen. Runs with or without the Fasteners Workbench |
+| `t_joint` | Flange joints: EN weld neck to weld neck and ASME slip-on to blind, with gasket, bolts and nuts, checked for clashes |
+| `t_smart` | Smart Fasteners: clearance into tapped, counterbore, through bolt with nut, countersink, blind tapped, skips a blind clearance hole, in a document and in an assembly |
 | `t_toolbox2` | Toolbox on Hole Wizard holes in a part (pick a face: all its holes) |
 | `t_asm` | New Assembly, Insert Components, Mate (Concentric, Coincident, Distance, flip, cancel), Interference Detection |
 

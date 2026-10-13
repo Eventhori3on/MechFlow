@@ -58,7 +58,7 @@ im.alpha_composite(icon, (34 * S, 62 * S))
 d.text((108 * S, 58 * S), "MechFlow", font=font("InterDisplay-Bold.otf", 50), fill=navy)
 d.text((110 * S, 120 * S), "Mechanical design, the way you", font=font("Inter-Medium.otf", 17), fill=grey)
 d.text((110 * S, 142 * S), "already work.", font=font("Inter-Medium.otf", 17), fill=grey)
-d.text((36 * S, 228 * S), "VERSION 0.19.0", font=font("Inter-SemiBold.otf", 12), fill=blue)
+d.text((36 * S, 228 * S), "VERSION 0.20.0", font=font("Inter-SemiBold.otf", 12), fill=blue)
 d.text((36 * S, 248 * S), "Part  ·  Sketch  ·  Drawing  ·  Assembly", font=font("Inter-Regular.otf", 13), fill=grey)
 # footer in the blue band
 d.text((36 * S, (380 - 40) * S), "Built on FreeCAD", font=font("Inter-SemiBold.otf", 14), fill=(255, 255, 255))
