@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<package format="1" xmlns="https://wiki.freecad.org/Package_Metadata">
+  <name>MechFlow</name>
+  <description>A SOLIDWORKS-style workflow for FreeCAD: tabbed CommandManager, SOLIDWORKS-named feature dialogs (extrude, revolve, sweep, loft, fillet, shell, patterns, Hole Wizard), sketch relations and status colours, drawings from parts, assembly mates, Section View and rollback.</description>
+  <version>0.17.0</version>
+  <date>2026-10-13</date>
+  <maintainer email="watermanengineeringlimited@proton.me">Waterman Engineering</maintainer>
+  <license file="LICENSE">LGPL-2.1-or-later</license>
+  <url type="repository" branch="main">https://github.com/YOUR-GITHUB-USERNAME/MechFlow</url>
+  <url type="bugtracker">https://github.com/YOUR-GITHUB-USERNAME/MechFlow/issues</url>
+  <url type="readme">https://github.com/YOUR-GITHUB-USERNAME/MechFlow/blob/main/README.md</url>
+  <icon>Resources/icons/MechFlow.svg</icon>
+  <tag>solidworks</tag>
+  <tag>workflow</tag>
+  <tag>user interface</tag>
+  <tag>part design</tag>
+  <tag>assembly</tag>
+  <tag>drawing</tag>
+
+  <content>
+    <workbench>
+      <name>MechFlow</name>
+      <classname>MechFlowWorkbench</classname>
+      <subdirectory>./</subdirectory>
+      <icon>Resources/icons/MechFlow.svg</icon>
+      <freecadmin>1.1.0</freecadmin>
+    </workbench>
+
+    <preferencepack>
+      <name>MechFlow</name>
+      <description>Navigation, units and view shortcuts that will feel familiar to SOLIDWORKS users.</description>
+    </preferencepack>
+  </content>
+</package>

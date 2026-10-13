@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Original MechFlow icon: an isometric block with a flow arrow -->
+  <polygon points="32,6 56,19 32,32 8,19" fill="#5fa8e8"/>
+  <polygon points="8,19 32,32 32,58 8,45" fill="#2f6fb0"/>
+  <polygon points="56,19 32,32 32,58 56,45" fill="#1f4f80"/>
+  <path d="M16 40 Q32 26 46 34" stroke="#ffb84d" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <polygon points="44,27 52,37 41,39" fill="#ffb84d"/>
+</svg>
