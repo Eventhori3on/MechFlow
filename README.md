@@ -80,14 +80,29 @@ Each feature has its own panel, and you edit it again by double-clicking.
   Perpendicular, Lock, Distance, Angle, Hinge, Slider. **Aligned/Anti-Aligned**
   flips the part.
 - Mates show in a *Mates* folder with SOLIDWORKS names.
-- **Toolbox** (standard parts): ISO, DIN, EN and ASME screws, nuts, washers,
-  pins and more, browsed by category. Pick a fastener, click hole edges (or a
-  face, for all its holes) and each one sizes itself to its hole: a 9 mm
-  clearance hole gets M8, a 5 mm tapped hole gets M6. Heads sit on the
-  counterbore floor or in the countersink, the length is picked from the hole
-  depth, and you can add a washer under the head and a washer and nut on the
-  far side. Fasteners are named by standard (*ISO 4762 M8x25<1>*) and move
-  with their part. Works in parts and assemblies.
+- **Toolbox** (standard parts), browsed by category and standard:
+  - **Flanges:** EN 1092-1 Type 11 weld neck, Type 01 plate and Type 05
+    blind (PN16, PN25, PN40, DN10-DN600); ASME B16.5 weld neck, slip-on and
+    blind, RF (Class 150 and 300, NPS 1/2-12).
+  - **Pipe:** EN 10220 (ISO 4200 sizes) and ASME B36.10M (Sch 10/40/80), any
+    length.
+  - **Pipe fittings:** ASME B16.9 90 and 45 deg long radius elbows, equal
+    tees, concentric reducers and caps.
+  - **Bearings:** ISO 15 deep groove ball bearings, 60xx, 62xx and 63xx.
+  - Click a pipe end and a flange or fitting sizes itself to the pipe; click
+    a flange face for a blind flange; click a shaft end or housing bore for a
+    bearing. Change size or rating later in the properties.
+  - **Fasteners:** ISO, DIN, EN and ASME screws, nuts, washers, pins and
+    more. Click hole edges (or a face, for all its holes) and each one sizes
+    itself to its hole: a 9 mm clearance hole gets M8, a 5 mm tapped hole
+    gets M6. Heads sit on the counterbore floor or in the countersink, the
+    length is picked from the hole depth, and you can add a washer under the
+    head and a washer and nut on the far side.
+  - Parts are named by standard (*ISO 4762 M8x25<1>*,
+    *EN 1092-1/11/B1/DN50/PN16<1>*), move with the part they're on, and work
+    in parts and assemblies.
+
+  ![Toolbox flanges, fittings and a bearing](docs/screenshots/stdparts.png)
 
   ![Toolbox fasteners in Hole Wizard holes](docs/screenshots/toolbox.png)
 
@@ -111,7 +126,12 @@ FreeCAD's, so a few things work differently:
   FreeCAD's own joint dialog.
 - Mid-plane and through-point reference planes keep their position when the
   model changes. Reopen them and press OK to update.
-- The Toolbox uses the free **Fasteners Workbench** for its parts. Install it
+- Flange and fitting dimensions come from published EN 1092-1, ASME B16.5,
+  B16.9, B36.10M and ISO 15 tables (sources are listed in
+  `mechflow_gui/stdparts_data.py`). Check critical dimensions against the
+  current standard before manufacture. Bearings are modelled to their
+  boundary dimensions, with simplified rings and balls.
+- The Toolbox's screws, nuts and washers use the free **Fasteners Workbench**. Install it
   from the Addon Manager (MechFlow offers to open it the first time). A
   fastener is attached to its hole edge rather than held by mates, and only
   metric (ISO 273) holes are sized automatically; for inch fasteners pick the

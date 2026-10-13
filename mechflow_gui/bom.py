@@ -42,6 +42,16 @@ def _fastener_row(o):
     return name, desc
 
 
+def _std_row(o):
+    from mechflow_gui import stdparts
+    return stdparts.object_designation(o), stdparts.description(o.StdType)
+
+
+def _is_std(o):
+    from mechflow_gui import stdparts
+    return stdparts.is_std_object(o)
+
+
 def _is_fastener(o):
     return hasattr(o, "Type") and hasattr(o, "Diameter") and \
         type(getattr(o, "Proxy", None)).__name__ == "FSScrewObject"
@@ -56,6 +66,8 @@ def _part_row(o):
             target = target[0]
     if _is_fastener(target):
         return _fastener_row(target)
+    if _is_std(target):
+        return _std_row(target)
     # A part kept in its own file is known by its file name, like SOLIDWORKS.
     if target.Document is not o.Document:
         name = target.Document.Label
@@ -72,10 +84,11 @@ def rows(asm):
         if o.TypeId in SKIP_TYPES or any(o.isDerivedFrom(t) for t in SKIP_TYPES[:4]):
             continue
         if getattr(o, "Visibility", True) is False and not _is_fastener(o) \
-                and o.TypeId != "App::Link":
+                and not _is_std(o) and o.TypeId != "App::Link":
             continue
         try:
-            name, desc = _fastener_row(o) if _is_fastener(o) else _part_row(o)
+            name, desc = (_fastener_row(o) if _is_fastener(o) else
+                          _std_row(o) if _is_std(o) else _part_row(o))
         except Exception:
             continue
         n = 1

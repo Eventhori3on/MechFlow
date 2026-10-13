@@ -109,6 +109,9 @@ def standard_of(ftype):
 
 def pretty(ftype):
     """'ISO4762' -> 'ISO 4762', 'ASMEB18.3.1A' -> 'ASME B18.3.1A'."""
+    from mechflow_gui import stdparts
+    if stdparts.is_std(ftype):
+        return ""
     for s in ("ASME", "ISO", "DIN", "EN", "SAE", "GOST"):
         if ftype.startswith(s):
             return f"{s} {ftype[len(s):]}"
@@ -116,10 +119,13 @@ def pretty(ftype):
 
 
 def catalog(standard=None):
-    """[(category, [(type, description)])] from the Fasteners Workbench."""
+    """[(category, [(type, description)])]: fasteners from the Fasteners
+    Workbench (when installed), then MechFlow's flanges, pipe, fittings and
+    bearings."""
+    from mechflow_gui import stdparts
     FC = fasteners()
     if FC is None:
-        return []
+        return stdparts.catalog(standard)
     table = FC.FSScrewCommandTable
     out = []
     for cat, groups in CATEGORY_GROUPS:
@@ -130,10 +136,15 @@ def catalog(standard=None):
         items.sort(key=lambda i: i[0])
         if items:
             out.append((cat, items))
-    return out
+    return out + stdparts.catalog(standard)
 
 
 def icon(ftype):
+    from mechflow_gui import stdparts, icon_path
+    if stdparts.is_std(ftype):
+        cat = stdparts.TYPES[ftype][0]
+        return QtGui.QIcon(icon_path({"Flanges": "Flange.svg", "Bearings": "Bearing.svg"}.get(
+            cat, "Pipe.svg")))
     FC = fasteners()
     if FC is None:
         return QtGui.QIcon()
@@ -398,7 +409,9 @@ def _outward(obj, sub):
         if radial.Length < 1e-6:
             radial = ax.cross(App.Vector(0, 1, 0))
         radial.normalize()
-        for dr in (0.3, 0.1, 1.0):
+        # Just outside the circle (a hole edge), then just inside (a pipe or
+        # shaft end, where the material is inside the circle).
+        for dr in (0.3, 0.1, 1.0, -0.3, -0.1, -min(1.0, 0.5 * r)):
             p = c + radial * (r + dr)
             up = solid.isInside(p + ax * 0.05, 1e-7, False)
             down = solid.isInside(p - ax * 0.05, 1e-7, False)
@@ -491,8 +504,13 @@ def attachable_selection(container=None):
     """[(obj, [sub])] for each hole edge selected - or each hole in a selected
     face - with obj inside the container (an assembly: the component link)."""
     import Part
-    import FastenerBase
     doc = App.ActiveDocument
+
+    def edge_name(shape, edge):
+        for i, e in enumerate(shape.Edges):
+            if e.isSame(edge):
+                return f"Edge{i + 1}"
+        return None
     out, seen = [], []
 
     def dup(e):
@@ -529,7 +547,7 @@ def attachable_selection(container=None):
                 for e in shape.Edges:
                     if type(e.Curve).__name__ != "Circle" or any(o.isSame(e) for o in outer):
                         continue
-                    name = FastenerBase.GetEdgeName(whole, e)
+                    name = edge_name(whole, e)
                     if name is None or dup(e):
                         continue
                     out.append((obj, [".".join(sub.split(".")[:-1] + [name])]))
@@ -574,11 +592,22 @@ class ToolboxPanel:
         root.addWidget(self.tree, 1)
 
         form = QtWidgets.QFormLayout()
+        self.form_layout = form
         self.size = QtWidgets.QComboBox()
         self.size.currentTextChanged.connect(self._size_changed)
         form.addRow("Size", self.size)
+        self.rating = QtWidgets.QComboBox()
+        self.rating.setToolTip("Pressure rating (PN / Class) or pipe schedule")
+        self.rating.currentTextChanged.connect(lambda *_: self._refresh_holes())
+        form.addRow("Rating", self.rating)
         self.length = QtWidgets.QComboBox()
         form.addRow("Length", self.length)
+        self.pipe_length = QtWidgets.QDoubleSpinBox()
+        self.pipe_length.setRange(1.0, 100000.0)
+        self.pipe_length.setDecimals(1)
+        self.pipe_length.setSuffix(" mm")
+        self.pipe_length.setValue(1000.0)
+        form.addRow("Pipe length", self.pipe_length)
         self.ends = QtWidgets.QComboBox()
         self.ends.addItems(ENDS)
         form.addRow("Ends in", self.ends)
@@ -587,11 +616,12 @@ class ToolboxPanel:
         root.addLayout(form)
 
         hb = QtWidgets.QGroupBox("Holes")
+        self.hole_box = hb
         hv = QtWidgets.QVBoxLayout(hb)
         self.hole_list = QtWidgets.QListWidget()
         self.hole_list.setMaximumHeight(90)
         hv.addWidget(self.hole_list)
-        clr = QtWidgets.QPushButton("Clear Holes")
+        clr = QtWidgets.QPushButton("Clear")
         clr.clicked.connect(self._clear)
         hv.addWidget(clr)
         root.addWidget(hb)
@@ -600,6 +630,14 @@ class ToolboxPanel:
         self.msg.setWordWrap(True)
         self.msg.setStyleSheet("color: gray;")
         root.addWidget(self.msg)
+        if fasteners() is None:
+            note = QtWidgets.QLabel("Screws, nuts, washers and pins come from the free "
+                                    "<b>Fasteners Workbench</b>, which isn't installed.")
+            note.setWordWrap(True)
+            root.addWidget(note)
+            get = QtWidgets.QPushButton("Get the Fasteners Workbench...")
+            get.clicked.connect(offer_install)
+            root.addWidget(get)
         self._fill_tree()
         return w
 
@@ -623,14 +661,18 @@ class ToolboxPanel:
             top.setFont(0, f)
             self.tree.addTopLevelItem(top)
             for t, d in rows:
-                it = QtWidgets.QTreeWidgetItem([f"{pretty(t)}  {d}"])
+                it = QtWidgets.QTreeWidgetItem([f"{pretty(t)}  {d}".strip()])
                 it.setData(0, QtCore.Qt.UserRole, t)
                 it.setIcon(0, icon(t))
                 it.setToolTip(0, f"{pretty(t)} - {d}")
                 top.addChild(it)
                 if t == (cur or "ISO4762"):
                     select = it
-            top.setExpanded(bool(want) or cat == "Bolts and Screws")
+                elif select is None and cur is None and fasteners() is None:
+                    select = it
+            first = self.tree.topLevelItemCount() == 1
+            top.setExpanded(bool(want) or cat == "Bolts and Screws"
+                            or (first and fasteners() is None))
         self.tree.blockSignals(False)
         if select is not None:
             self.tree.setCurrentItem(select)
@@ -640,22 +682,63 @@ class ToolboxPanel:
         it = self.tree.currentItem() if hasattr(self, "tree") else None
         return it.data(0, QtCore.Qt.UserRole) if it is not None else None
 
+    def is_std(self, t=None):
+        from mechflow_gui import stdparts
+        t = t or self.current_type()
+        return bool(t) and stdparts.is_std(t)
+
+    def _row(self, widget, on):
+        try:
+            self.form_layout.setRowVisible(widget, on)
+        except Exception:
+            widget.setVisible(on)
+            lbl = self.form_layout.labelForField(widget)
+            if lbl is not None:
+                lbl.setVisible(on)
+
     def _type_changed(self, *_):
+        from mechflow_gui import stdparts
         t = self.current_type()
+        std = self.is_std(t)
         self.size.blockSignals(True)
         self.size.clear()
         if t:
-            self.size.addItem("Auto (from hole)")
-            self.size.addItems(diameters(t))
+            self.size.addItem("Auto (from edge)" if std else "Auto (from hole)")
+            self.size.addItems(stdparts.sizes(t) if std else diameters(t))
         self.size.blockSignals(False)
-        screw = bool(t) and hasattr_length(t)
+        self.rating.clear()
+        if std:
+            self.rating.addItems(stdparts.ratings(t))
+            self.rating.setCurrentText(stdparts.default_rating(t))
+        self._row(self.rating, std and self.rating.count() > 0)
+        self._row(self.pipe_length, std and stdparts.has_length(t))
+        for w in (self.length, self.ends, self.washer):
+            self._row(w, not std)
+        self.hole_box.setTitle("Edges" if std else "Holes")
+        screw = bool(t) and not std and hasattr_length(t)
         self.ends.setEnabled(screw)
         self.washer.setEnabled(screw and t not in COUNTERSUNK)
         self._size_changed()
+        self._refresh_holes()
+        if std:
+            cat = stdparts.TYPES[t][0]
+            hint = {"Flanges": "Click a pipe end (its outside edge) - or a flange's edge for a "
+                               "blind flange.",
+                    "Pipe": "Click the end of a flange or fitting to carry on from it.",
+                    "Pipe Fittings": "Click a pipe end to fit it there.",
+                    "Bearings": "Click a shaft end or a housing bore edge."}[cat]
+            self.msg.setText(hint + " It is sized to the edge. With nothing picked, OK "
+                             "puts one at the origin.")
+        elif t:
+            self.msg.setText("Click hole edges in the view - or a face, for all its holes. "
+                             "OK inserts the fasteners.")
 
     def _size_changed(self, *_):
         t = self.current_type()
         self.length.clear()
+        if self.is_std(t):
+            self.length.setEnabled(False)
+            return
         if not t or not hasattr_length(t):
             self.length.setEnabled(False)
             return
@@ -677,18 +760,42 @@ class ToolboxPanel:
             return
         sels = attachable_selection(self.container)
         Gui.Selection.clearSelection()
-        known = {(h.obj.Name, h.seat_sub) for h in self.holes}
+        std = self.is_std()
+        known = {(h.obj.Name, h.sub if std else h.seat_sub) for h in self.holes}
         for s in sels:
             if s is None:
                 continue
             h = Hole(s[0], s[1][0])
-            if not h.ok or (h.obj.Name, h.seat_sub) in known:
+            key = (h.obj.Name, h.sub if std else h.seat_sub)
+            if not h.ok or key in known:
                 continue
-            known.add((h.obj.Name, h.seat_sub))
+            known.add(key)
             self.holes.append(h)
-            self.hole_list.addItem(f"{h.obj.Label}: {h.describe()}")
-        self.msg.setText(f"{len(self.holes)} hole{'s' if len(self.holes) != 1 else ''} "
-                         "picked. OK inserts the fasteners.")
+        self._refresh_holes()
+        n = len(self.holes)
+        what = ("edge" if std else "hole") + ("s" if n != 1 else "")
+        self.msg.setText(f"{n} {what} picked. OK inserts "
+                         + ("the parts." if std else "the fasteners."))
+
+    def _refresh_holes(self):
+        from mechflow_gui import stdparts
+        import Part
+        self.hole_list.clear()
+        t = self.current_type()
+        for h in self.holes:
+            if self.is_std(t):
+                try:
+                    e = Part.getShape(h.obj, h.sub, needSubElement=True, noElementMap=True)
+                    d = 2 * e.Curve.Radius
+                    size = stdparts.match_size(t, self.rating.currentText()
+                                               or stdparts.default_rating(t), d)
+                    text = f"Ø{d:.2f} edge" + (f" → {size}" if size else
+                                                    " (no matching size)")
+                except Exception:
+                    text = "edge"
+            else:
+                text = h.describe()
+            self.hole_list.addItem(f"{h.obj.Label}: {text}")
 
     def _clear(self):
         self.holes = []
@@ -698,8 +805,10 @@ class ToolboxPanel:
     def accept(self):
         t = self.current_type()
         if not t:
-            QtWidgets.QMessageBox.information(self.form, "Toolbox", "Pick a fastener first.")
+            QtWidgets.QMessageBox.information(self.form, "Toolbox", "Pick a part first.")
             return False
+        if self.is_std(t):
+            return self._accept_std(t)
         self._timer.stop()
         doc = (self.container.Document if self.container is not None else App.ActiveDocument)
         doc.openTransaction("Toolbox")
@@ -727,6 +836,35 @@ class ToolboxPanel:
         Gui.Control.closeDialog()
         return True
 
+    def _accept_std(self, t):
+        from mechflow_gui import stdparts
+        self._timer.stop()
+        doc = (self.container.Document if self.container is not None else App.ActiveDocument)
+        size = None if self.size.currentText().startswith("Auto") else self.size.currentText()
+        rating = self.rating.currentText() or None
+        length = self.pipe_length.value()
+        made = []
+        doc.openTransaction("Toolbox")
+        try:
+            if self.holes:
+                for h in self.holes:
+                    made.append(stdparts.place(self.container, t, h.obj, h.sub, size, rating,
+                                               length))
+            else:
+                made.append(stdparts.place(self.container, t, None, None, size, rating, length))
+            doc.commitTransaction()
+        except Exception as e:
+            doc.abortTransaction()
+            QtWidgets.QMessageBox.warning(self.form, "Toolbox",
+                                          f"The part couldn't be inserted:\n{e}")
+            return False
+        doc.recompute()
+        App.Console.PrintMessage(
+            "MechFlow Toolbox: inserted " + ", ".join(o.Label for o in made) + "\n")
+        self.made = made
+        Gui.Control.closeDialog()
+        return True
+
     def reject(self):
         self._timer.stop()
         Gui.Control.closeDialog()
@@ -734,9 +872,6 @@ class ToolboxPanel:
 
 
 def toolbox():
-    if fasteners() is None:
-        offer_install()
-        return None
     if App.ActiveDocument is None:
         App.newDocument()
     if Gui.Control.activeDialog():
