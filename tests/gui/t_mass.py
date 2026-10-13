@@ -72,4 +72,35 @@ def check_views():
     log("pdf", os.path.getsize(OUT + "t_mass.pdf"))
 at(check_views, 3000)
 at(lambda: shot("mass_drawing"), 500)
+
+
+def section_part():
+    # Section View on a Part container (bodies + weldment members inside it):
+    # used to find nothing to cut in assemblies and Parts.
+    from mechflow_gui import section
+    App.setActiveDocument("Frame")
+    Gui.Selection.clearSelection()
+    section.toggle()
+    p = section._panel; S["sp"] = p
+    log("section originals", [o.Label for o in p.state.originals])
+    assert S["part"] in p.state.originals, "the Part isn't sectioned"
+    top = face_where(S["b"], lambda f: plane_face(f) and normal(f).x < -0.99)
+    Gui.Selection.addSelection("Frame", S["part"].Name, S["b"].Name + "." + top)
+at(section_part, 1500)
+
+
+def section_cut():
+    p = S["sp"]
+    p._set_distance(70, from_drag=False)
+    p.state.apply()
+    solids = [s for t in p.state.temps for s in App.ActiveDocument.getObject(t).Shape.Solids]
+    bb = None
+    for s_ in solids:
+        bb = s_.BoundBox if bb is None else bb.united(s_.BoundBox)
+    log("section solids", len(solids), "x from", round(bb.XMin, 1))
+    assert len(solids) == 2 and abs(bb.XMin - 70) < 1e-3, "plate and member not both cut at x=70"
+    p.accept()
+    from mechflow_gui import section
+    section.toggle(); section._panel.reject() if hasattr(section._panel, "reject") else None
+at(section_cut, 1500)
 run()

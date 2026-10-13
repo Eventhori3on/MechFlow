@@ -31,19 +31,58 @@ _observer = None
 
 # ======================================================================= model
 
+_CONTAINERS = ("App::Part", "Assembly::AssemblyObject")
+_SKIP_TYPES = ("Sketcher::SketchObject", "Assembly::JointGroup", "Assembly::ViewGroup",
+               "Assembly::BomGroup", "Assembly::BomObject", "Spreadsheet::Sheet")
+
+
+def _is_container(o):
+    try:
+        lo = o.getLinkedObject(True)
+    except Exception:
+        lo = o
+    return lo.TypeId in _CONTAINERS or lo.isDerivedFrom("App::Part")
+
+
+def _visible(o):
+    try:
+        return bool(o.ViewObject.Visibility)
+    except Exception:
+        return False
+
+
+def _top_level(o):
+    """Not inside a body, Part or assembly (those are reached through it)."""
+    try:
+        if o.getParentGeoFeatureGroup() is not None:
+            return False
+    except Exception:
+        pass
+    for parent in o.InList:
+        if parent.TypeId in _CONTAINERS or parent.isDerivedFrom("App::Part") or \
+                parent.TypeId == "PartDesign::Body" or parent.TypeId.startswith("Assembly::"):
+            return False
+    return True
+
+
 def _solids_on_show(doc):
+    """What a section cuts: visible bodies and loose solids, and visible
+    Parts / assemblies / links (cut through everything inside them)."""
     out = []
     for o in doc.Objects:
         if o.Name.startswith(TEMP_PREFIX) or o.Name.startswith("MechFlow_Pick"):
             continue
-        try:
-            if not o.ViewObject.Visibility:
-                continue
-        except Exception:
+        if not _visible(o) or o.TypeId in _SKIP_TYPES:
+            continue
+        if _is_container(o):
+            if _top_level(o):
+                out.append(o)
             continue
         if o.TypeId == "PartDesign::Body" or (
                 o.isDerivedFrom("Part::Feature") and not o.InList
                 and not o.isDerivedFrom("PartDesign::Feature")):
+            if o.TypeId == "PartDesign::Body" and not _top_level(o):
+                continue
             shape = getattr(o, "Shape", None)
             try:
                 if shape is not None and not shape.isNull() and shape.Solids:
@@ -51,6 +90,75 @@ def _solids_on_show(doc):
             except Exception:
                 pass
     return out
+
+
+def _leaves(o):
+    """[(global solid shape, view object for its colour)] for one original:
+    itself, or every visible solid inside a Part / assembly / link."""
+    import Part
+    if not _is_container(o):
+        return [(o.Shape, o.ViewObject)]
+    out = []
+
+    def walk(path, obj):
+        try:
+            lo = obj.getLinkedObject(True)
+        except Exception:
+            lo = obj
+        if lo.TypeId in _CONTAINERS or lo.isDerivedFrom("App::Part"):
+            for c in getattr(lo, "Group", []):
+                if c.TypeId.startswith("App::Origin") or c.TypeId in _SKIP_TYPES:
+                    continue
+                try:
+                    if c.getParentGeoFeatureGroup() not in (lo, None):
+                        continue
+                except Exception:
+                    pass
+                if not _visible(c):
+                    continue
+                walk(path + c.Name + ".", c)
+            return
+        try:
+            sh = Part.getShape(o, path) if path else Part.getShape(o)
+        except Exception:
+            return
+        try:
+            if sh.isNull() or not sh.Solids:
+                return
+        except Exception:
+            return
+        out.append((sh, getattr(lo, "ViewObject", None) or getattr(obj, "ViewObject", None)))
+    walk("", o)
+    return out
+
+
+def _look(vo):
+    """Colour key + a way to copy it onto another view object."""
+    try:
+        app = vo.ShapeAppearance
+        m = app[0]
+        return (tuple(round(c, 3) for c in m.DiffuseColor[:3]), round(m.Transparency, 2)), app
+    except Exception:
+        try:
+            return (tuple(vo.ShapeColor[:3]), 0), None
+        except Exception:
+            return ((0.8, 0.8, 0.8), 0), None
+
+
+def _side(shape, planes):
+    """'keep' if wholly outside the cut-away region, 'gone' if wholly
+    inside it, else 'cut'. The region is where every plane's box overlaps."""
+    bb = shape.BoundBox
+    corners = [App.Vector(x, y, z) for x in (bb.XMin, bb.XMax)
+               for y in (bb.YMin, bb.YMax) for z in (bb.ZMin, bb.ZMax)]
+    all_in = True
+    for base, n, _d in planes:
+        ds = [(c - base).dot(n) for c in corners]   # > 0: removed side
+        if max(ds) <= 1e-6:
+            return "keep"
+        if min(ds) < -1e-6:
+            all_in = False
+    return "gone" if all_in else "cut"
 
 
 def _plane_rotation(n):
@@ -72,9 +180,12 @@ class SectionState:
 
     def bbox(self):
         box = None
+        import Part
         for o in self.originals:
             try:
-                bb = o.Shape.BoundBox
+                bb = (Part.getShape(o) if _is_container(o) else o.Shape).BoundBox
+                if not bb.isValid():
+                    continue
                 box = bb if box is None else box.united(bb)
             except Exception:
                 pass
@@ -131,51 +242,65 @@ class SectionState:
                 box.Placement = App.Placement(base, _plane_rotation(s["n"]))
                 remove = box if remove is None else remove.common(box)
                 planes.append((base, s["n"], s["distance"]))
+            groups = {}        # colour -> [appearance, [solids]]
+            cap_faces = []
             for o in self.originals:
-                try:
-                    cut = o.Shape.cut(remove)
-                except Exception as e:
-                    App.Console.PrintWarning(f"MechFlow: couldn't section {o.Label} ({e})\n")
-                    continue
-                t = self.doc.addObject("Part::Feature", f"{TEMP_PREFIX}_{o.Name}")
-                t.Shape = cut
-                t.Label = f"{o.Label} (section)"
-                self.temps.append(t.Name)
-                vo = t.ViewObject
-                try:
-                    vo.ShowInTree = False
-                except Exception:
-                    pass
-                try:
-                    vo.ShapeAppearance = o.ViewObject.ShapeAppearance
-                except Exception:
-                    try:
-                        vo.ShapeColor = o.ViewObject.ShapeColor
-                    except Exception:
-                        pass
+                for sh, vo in _leaves(o):
+                    side = _side(sh, planes)
+                    if side == "gone":
+                        continue
+                    if side == "cut":
+                        try:
+                            sh = sh.cut(remove)
+                        except Exception as e:
+                            App.Console.PrintWarning(
+                                f"MechFlow: couldn't section part of {o.Label} ({e})\n")
+                            continue
+                        for face in sh.Faces:
+                            try:
+                                if type(face.Surface).__name__ != "Plane":
+                                    continue
+                                fp, fn = pick_solid._face_probe(face)
+                                for base, n, dist in planes:
+                                    if dist <= 1e-6:
+                                        continue
+                                    if abs(abs(fn.dot(n)) - 1.0) < 1e-4 and \
+                                            abs((fp - base).dot(n)) < 1e-3:
+                                        cap_faces.append(face)
+                                        break
+                            except Exception:
+                                continue
+                    key, app = _look(vo)
+                    g = groups.setdefault(key, [app, [], vo])
+                    g[1].extend(sh.Solids)
                 try:
                     o.ViewObject.Visibility = False
                 except Exception:
                     pass
-                caps = []
-                for face in cut.Faces:
-                    try:
-                        if type(face.Surface).__name__ != "Plane":
-                            continue
-                        fp, fn = pick_solid._face_probe(face)
-                        for base, n, dist in planes:
-                            if dist <= 1e-6:
-                                continue
-                            if abs(abs(fn.dot(n)) - 1.0) < 1e-4 and abs((fp - base).dot(n)) < 1e-3:
-                                caps.append(face)
-                                break
-                    except Exception:
-                        continue
-                node = _cap_node(caps) if caps else None
-                sg = pick_solid._scene()
-                if node is not None and sg is not None:
-                    sg.addChild(node)
-                    self.caps.append((sg, node))
+            for i, (key, (app, solids, vo)) in enumerate(groups.items()):
+                if not solids:
+                    continue
+                t = self.doc.addObject("Part::Feature", f"{TEMP_PREFIX}_{i}")
+                t.Shape = solids[0] if len(solids) == 1 else Part.makeCompound(solids)
+                t.Label = "Section view"
+                self.temps.append(t.Name)
+                tv = t.ViewObject
+                try:
+                    tv.ShowInTree = False
+                except Exception:
+                    pass
+                try:
+                    if app is not None:
+                        tv.ShapeAppearance = app
+                    else:
+                        tv.ShapeColor = key[0]
+                except Exception:
+                    pass
+            node = _cap_node(cap_faces) if cap_faces else None
+            sg = pick_solid._scene()
+            if node is not None and sg is not None:
+                sg.addChild(node)
+                self.caps.append((sg, node))
             self.doc.recompute()
         finally:
             self.busy = False
@@ -617,7 +742,9 @@ def _shape_key():
     key = []
     for o in _state.originals if _state else []:
         try:
-            key.append((o.Name, round(o.Shape.Volume, 6), len(o.Shape.Faces)))
+            import Part
+            sh = Part.getShape(o) if _is_container(o) else o.Shape
+            key.append((o.Name, round(sh.Volume, 6), len(sh.Faces), str(sh.BoundBox)))
         except Exception:
             pass
     return tuple(key)
