@@ -641,6 +641,14 @@ def register():
     ):
         Gui.addCommand("MechFlow_" + name, _simple(
             menu, tip, pix, (lambda f=fn: _run("assembly", f)), lambda: True))
+    Gui.addCommand("MechFlow_Toolbox", _simple(
+        "Toolbox", "Standard parts (ISO, DIN, ASME screws, nuts, washers, pins): pick one "
+        "and click holes - it sizes itself to each hole", icon_path("Toolbox.svg"),
+        lambda: _run("toolbox", "toolbox"), lambda: True))
+    Gui.addCommand("MechFlow_BOM", _simple(
+        "Bill of Materials", "Bill of Materials for the assembly: identical parts and "
+        "fasteners counted together", icon_path("BOM.svg"),
+        lambda: _run("bom", "bill_of_materials"), lambda: True))
     Gui.addCommand("MechFlow_InstallSplash", _simple(
         "Use MechFlow Splash Screen", "Show the MechFlow splash screen when FreeCAD starts",
         icon_path("MechFlow.svg"), lambda: _run("splash", "install"), lambda: True))

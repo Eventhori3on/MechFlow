@@ -27,7 +27,7 @@ fi
 
 tests=("$@")
 if [ ${#tests[@]} -eq 0 ]; then
-    tests=(t_tabs t_pat t_dress t_sweep t_thin t_handles t_rel t_tab t_draw t_asm t_splash)
+    tests=(t_tabs t_pat t_dress t_sweep t_thin t_handles t_rel t_tab t_draw t_asm t_splash t_hole t_toolbox t_toolbox2)
 fi
 
 fail=0

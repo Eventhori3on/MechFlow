@@ -132,6 +132,7 @@ TABS = [
         ("New\nAssembly", "MechFlow_NewAssembly"),
         ("Insert\nComponents", "MechFlow_InsertComponents"),
         ("Mate", "MechFlow_Mate"),
+        ("Toolbox", "MechFlow_Toolbox"),
         None,
         ("stack", [("New Part", "Assembly_InsertNewPart"),
                    ("Fix / Float", "Assembly_ToggleGrounded"),
@@ -141,7 +142,7 @@ TABS = [
                    ("Screw Mate", "Assembly_CreateJointScrew")]),
         None,
         ("stack", [("Exploded View", "Assembly_CreateView"),
-                   ("Bill of Materials", "Assembly_CreateBom"),
+                   ("Bill of Materials", "MechFlow_BOM"),
                    ("Interference Detection", "MechFlow_Interference")]),
     ]),
 ]

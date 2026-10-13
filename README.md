@@ -34,7 +34,8 @@ Each feature has its own panel, and you edit it again by double-clicking.
   Feature**, and a drag arrow with a depth box in the 3D view.
 - **Revolved** Boss/Cut, **Swept** and **Lofted** Boss/Cut.
 - **Fillet** and **Chamfer** on many edges at once, **Shell**, **Draft**,
-  **Hole Wizard** (ISO M3–M20: simple, counterbore, countersink, tapped).
+  **Hole Wizard** (ISO M3–M20: simple, counterbore, countersink, tapped;
+  ISO 273 close / normal / loose clearance).
 - **Linear Pattern** (with a spacing drag arrow), **Circular Pattern**,
   **Mirror**.
 - **Reference Plane** (offset, at angle, mid plane, through a point, 3 points,
@@ -75,7 +76,20 @@ Each feature has its own panel, and you edit it again by double-clicking.
   Perpendicular, Lock, Distance, Angle, Hinge, Slider. **Aligned/Anti-Aligned**
   flips the part.
 - Mates show in a *Mates* folder with SOLIDWORKS names.
-- **Interference Detection**, Exploded View, Bill of Materials.
+- **Toolbox** (standard parts): ISO, DIN, EN and ASME screws, nuts, washers,
+  pins and more, browsed by category. Pick a fastener, click hole edges (or a
+  face, for all its holes) and each one sizes itself to its hole: a 9 mm
+  clearance hole gets M8, a 5 mm tapped hole gets M6. Heads sit on the
+  counterbore floor or in the countersink, the length is picked from the hole
+  depth, and you can add a washer under the head and a washer and nut on the
+  far side. Fasteners are named by standard (*ISO 4762 M8x25<1>*) and move
+  with their part. Works in parts and assemblies.
+
+  ![Toolbox fasteners in Hole Wizard holes](docs/screenshots/toolbox.png)
+
+- **Bill of Materials** with ITEM NO. / PART NUMBER / DESCRIPTION / QTY.,
+  counting identical parts and fasteners together.
+- **Interference Detection** and Exploded View.
 
 ![Mate panel](docs/screenshots/mate.png)
 
@@ -93,6 +107,11 @@ FreeCAD's, so a few things work differently:
   FreeCAD's own joint dialog.
 - Mid-plane and through-point reference planes keep their position when the
   model changes. Reopen them and press OK to update.
+- The Toolbox uses the free **Fasteners Workbench** for its parts. Install it
+  from the Addon Manager (MechFlow offers to open it the first time). A
+  fastener is attached to its hole edge rather than held by mates, and only
+  metric (ISO 273) holes are sized automatically; for inch fasteners pick the
+  size yourself.
 - MechFlow is tested on **FreeCAD 1.1**. Older versions are not supported.
 
 ## Install

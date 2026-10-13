@@ -57,6 +57,9 @@ class MechFlowWorkbench(Gui.Workbench):
             from PySide2 import QtCore
         from mechflow_gui import splash
         QtCore.QTimer.singleShot(5000, lambda: step("splash check", splash.check_at_startup))
+        # Toolbox fasteners keep their standard names in reopened files.
+        from mechflow_gui import toolbox
+        QtCore.QTimer.singleShot(3000, lambda: step("toolbox names", toolbox.patch_labels))
 
         # Own commands live in the CommandManager and the MechFlow menu,
         # not a separate toolbar row.
@@ -81,6 +84,7 @@ class MechFlowWorkbench(Gui.Workbench):
                                      "MechFlow_RollBack", "MechFlow_RollToEnd",
                                      "Separator", "MechFlow_NewAssembly",
                                      "MechFlow_InsertComponents", "MechFlow_Mate",
+                                     "MechFlow_Toolbox", "MechFlow_BOM",
                                      "Separator", "MechFlow_MakeDrawing",
                                      "MechFlow_Standard3View", "MechFlow_SheetFormat",
                                      "MechFlow_SavePDF",

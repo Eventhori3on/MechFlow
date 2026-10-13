@@ -23,7 +23,9 @@ except ImportError:
 
 TYPES = ["Simple", "Counterbore", "Countersink", "Tapped"]
 SIZES = ["M3", "M4", "M5", "M6", "M8", "M10", "M12", "M16", "M20"]
-FITS = {"Normal": ["Standard", "Normal"], "Close": ["Close"], "Loose": ["Wide", "Loose"]}
+# FreeCAD 1.1 calls the ISO 273 clearance fits Fine / Medium / Coarse.
+FITS = {"Normal": ["Medium", "Standard", "Normal"], "Close": ["Fine", "Close"],
+        "Loose": ["Coarse", "Wide", "Loose"]}
 CUTS = {
     "Simple": ["None"],
     "Counterbore": ["ISO 4762", "Counterbore"],
@@ -44,6 +46,25 @@ def _sketch_on_face(body, obj, face):
     except Exception:
         pass
     return sk
+
+
+def set_thread_size(hole, size):
+    """FreeCAD 1.1 names sizes with the pitch ("M8x1.25"); older versions
+    used "M8". Pick the coarse-pitch entry for a size like "M8"."""
+    try:
+        options = list(hole.getEnumerationsOfProperty("ThreadSize") or [])
+    except Exception:
+        return False
+    for name in options:
+        if name == size or name.split("x")[0] == size:
+            hole.ThreadSize = name
+            return True
+    return False
+
+
+def size_of(hole):
+    """'M8' from a hole's ThreadSize ('M8x1.25' or 'M8')."""
+    return str(getattr(hole, "ThreadSize", "")).split("x")[0]
 
 
 def _circles(sketch):
@@ -164,7 +185,7 @@ class HolePanel:
                 self.type.setCurrentText("Counterbore")
             elif "10642" in cut or "sink" in cut.lower():
                 self.type.setCurrentText("Countersink")
-            size = str(getattr(h, "ThreadSize", "M6"))
+            size = size_of(h) or "M6"
             if size in SIZES:
                 self.size.setCurrentText(size)
             fit = str(getattr(h, "ThreadFit", "Standard"))
@@ -263,7 +284,9 @@ class HolePanel:
         kind = self.type.currentText()
         try:
             _set_enum(h, "ThreadType", ["ISOMetricProfile"])
-            _set_enum(h, "ThreadSize", [self.size.currentText()])
+            if not set_thread_size(h, self.size.currentText()):
+                App.Console.PrintWarning(
+                    f"MechFlow: thread size {self.size.currentText()} not available\n")
             if _has(h, "Threaded"):
                 h.Threaded = kind == "Tapped"
             if _has(h, "ModelThread"):

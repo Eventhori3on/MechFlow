@@ -19,6 +19,9 @@ pops up an unexpected dialog.
 | `t_tab` | Sketch tab and the Display/Delete Relations toggle |
 | `t_draw` | Make Drawing from Part (ISO and ANSI), title block, Sheet Format, PDF |
 | `t_splash` | MechFlow splash screen: set, restore after a FreeCAD reinstall, restore FreeCAD's, leave other branding alone (writes `branding.xml` in the test FreeCAD) |
+| `t_hole` | Hole Wizard sizes: ISO 273 clearance (close / normal / loose), counterbore, tapped, blind, re-edit |
+| `t_toolbox` | Toolbox: hole recognition (clearance, tapped, counterbore, countersink), seating, lengths, washer + nut, labels, assembly (follows the part), Bill of Materials. Needs the Fasteners Workbench; skipped without it |
+| `t_toolbox2` | Toolbox on Hole Wizard holes in a part (pick a face: all its holes) |
 | `t_asm` | New Assembly, Insert Components, Mate (Concentric, Coincident, Distance, flip, cancel), Interference Detection |
 
 ## Running
