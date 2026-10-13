@@ -424,6 +424,12 @@ def _outward(obj, sub):
     return None
 
 
+# Toolbox "Outlet points" choices for elbows and tees (global directions)
+AIMS = [("As placed", None), ("Up (+Z)", (0, 0, 1)), ("Down (-Z)", (0, 0, -1)),
+        ("Right (+X)", (1, 0, 0)), ("Left (-X)", (-1, 0, 0)),
+        ("Back (+Y)", (0, 1, 0)), ("Front (-Y)", (0, -1, 0))]
+
+
 def auto_length(ftype, hole, diam, ends=ENDS[0], offset=0.0):
     """Standard screw length for a hole (see place)."""
     nom, pitch = METRIC.get(diam, (8.0, 1.25))[:2]
@@ -634,6 +640,11 @@ class ToolboxPanel:
         self.joint.setToolTip("On another flange's face: add a gasket between them and bolt "
                               "them together (bolts need the Fasteners Workbench)")
         form.addRow("Joint", self.joint)
+        self.points = QtWidgets.QComboBox()
+        for text, vec in AIMS:
+            self.points.addItem(text, vec)
+        self.points.setToolTip("Which way the elbow's outlet (or the tee's branch) points")
+        form.addRow("Outlet points", self.points)
         root.addLayout(form)
 
         hb = QtWidgets.QGroupBox("Holes")
@@ -734,6 +745,7 @@ class ToolboxPanel:
         self._row(self.rating, std and self.rating.count() > 0)
         self._row(self.pipe_length, std and stdparts.has_length(t))
         self._row(self.joint, std and stdparts.is_flange(t))
+        self._row(self.points, std and stdparts.outlet_direction(t) is not None)
         for w in (self.length, self.ends, self.washer):
             self._row(w, not std)
         self.hole_box.setTitle("Edges" if std else "Holes")
@@ -879,6 +891,11 @@ class ToolboxPanel:
                                            length, joint=self.joint.isChecked())
             else:
                 made += stdparts.place(self.container, t, None, None, size, rating, length)
+            target = self.points.currentData()
+            if target is not None:
+                for o in made:
+                    if getattr(o, "StdType", None) == t:
+                        stdparts.aim(o, App.Vector(*target))
             doc.commitTransaction()
         except Exception as e:
             doc.abortTransaction()

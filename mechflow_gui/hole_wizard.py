@@ -71,6 +71,52 @@ def _circles(sketch):
     return [g for g in sketch.Geometry if type(g).__name__ == "Circle"]
 
 
+def first_wall_depth(shape, points, direction, radius, overshoot=0.5):
+    """Up To Next: how deep to drill from each point along direction to come
+    out of the first wall (and no further), checked round the hole's edge
+    too so a curved inside face is cleared everywhere. None if a hole never
+    comes out (a solid block - use Blind or Through All)."""
+    import math
+    import Part
+    d = App.Vector(direction).normalize()
+    bb = shape.BoundBox
+    reach = bb.DiagonalLength * 2 + 10
+    # two directions square to the drill axis
+    a = App.Vector(1, 0, 0) if abs(d.x) < 0.9 else App.Vector(0, 1, 0)
+    u = d.cross(a).normalize()
+    v = d.cross(u).normalize()
+    deepest = 0.0
+    for p in points:
+        for k in range(9):
+            q = App.Vector(p)
+            if k:
+                ang = (k - 1) * math.pi / 4
+                q = q + (u * math.cos(ang) + v * math.sin(ang)) * (radius * 0.98)
+            start = q - d * 1e-3
+            edge = Part.LineSegment(start, start + d * reach).toShape()
+            try:
+                inside = edge.common(shape)
+            except Exception:
+                return None
+            spans = []
+            for e in inside.Edges:
+                t0 = (e.Vertexes[0].Point - start).dot(d)
+                t1 = (e.Vertexes[-1].Point - start).dot(d)
+                spans.append((min(t0, t1), max(t0, t1)))
+            spans.sort()
+            # the material the drill meets first, starting at the face
+            first = None
+            for t0, t1 in spans:
+                if t0 < 1.0:
+                    first = t1 if first is None else max(first, t1)
+            if first is None:
+                continue               # this sample misses the part (edge of a face)
+            if first > reach * 0.49:
+                return None
+            deepest = max(deepest, first)
+    return deepest + overshoot if deepest > 0 else None
+
+
 class HolePanel:
     def __init__(self, body, sketch=None, hole=None):
         self.body = body
@@ -119,7 +165,7 @@ class HolePanel:
 
         end = QtWidgets.QGroupBox("End Condition")
         e = QtWidgets.QFormLayout(end)
-        self.end = self._combo(["Blind", "Through All"])
+        self.end = self._combo(["Blind", "Up To Next", "Through All"])
         e.addRow("", self.end)
         self.depth = QtWidgets.QDoubleSpinBox()
         self.depth.setRange(0.1, 1e5)
@@ -194,6 +240,8 @@ class HolePanel:
                     self.fit.setCurrentText(k)
             if str(getattr(h, "DepthType", "Dimension")) == "ThroughAll":
                 self.end.setCurrentText("Through All")
+            elif getattr(h, "MechFlowUpToNext", False):
+                self.end.setCurrentText("Up To Next")
             d = getattr(h, "Depth", 10.0)
             self.depth.setValue(getattr(d, "Value", d))
         finally:
@@ -294,8 +342,22 @@ class HolePanel:
             if kind != "Tapped":
                 _set_enum(h, "ThreadFit", FITS[self.fit.currentText()])
             _set_enum(h, "HoleCutType", CUTS[kind])
+            if not _has(h, "MechFlowUpToNext"):
+                h.addProperty("App::PropertyBool", "MechFlowUpToNext", "MechFlow",
+                              "Drilled through the first wall only (Up To Next)")
+            h.MechFlowUpToNext = self.end.currentText() == "Up To Next"
             if self.end.currentText() == "Through All":
                 _set_enum(h, "DepthType", ["ThroughAll"])
+            elif self.end.currentText() == "Up To Next":
+                _set_enum(h, "DepthType", ["Dimension"])
+                depth = self._up_to_next()
+                if depth is None:
+                    raise ValueError("no wall to drill through")
+                _set_enum(h, "DrillPoint", ["Flat"])
+                h.Depth = depth
+                self.depth.blockSignals(True)
+                self.depth.setValue(depth)
+                self.depth.blockSignals(False)
             else:
                 _set_enum(h, "DepthType", ["Dimension"])
                 h.Depth = self.depth.value()
@@ -306,6 +368,27 @@ class HolePanel:
         except Exception:
             pass
         self._check()
+
+    def _up_to_next(self):
+        base = self.hole.BaseFeature if self.hole is not None else self.base
+        if base is None:
+            return None
+        gp = self.sketch.getGlobalPlacement()
+        pts = [gp.multVec(g.Center) for g in _circles(self.sketch)]
+        n = gp.Rotation.multVec(App.Vector(0, 0, 1))
+        try:
+            r = float(self.size.currentText().lstrip("M")) * 0.55     # clearance
+        except Exception:
+            r = 6.0
+        try:
+            r = max(r, float(self.hole.Diameter) / 2)
+        except Exception:
+            pass
+        shape = base.Shape
+        # the drill goes into the material, away from the face's outside
+        probe = pts[0] - n * 0.05
+        direction = -n if shape.isInside(probe, 1e-6, True) else n
+        return first_wall_depth(shape, pts, direction, r)
 
     def _show_base(self, on):
         try:

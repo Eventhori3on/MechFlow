@@ -509,6 +509,58 @@ def _expand(links):
     return out
 
 
+def _top(o):
+    try:
+        return o.getParentGeoFeatureGroup() is None and not any(
+            p.TypeId in ("App::Part", "PartDesign::Body") or p.isDerivedFrom("App::Part")
+            for p in o.InList if hasattr(p, "Group") and o in p.Group)
+    except Exception:
+        return False
+
+
+def into_part(obj, sources=()):
+    """Keep a weldment part as one component (SOLIDWORKS: a weldment is one
+    part file): put the member / plate in the document's Part container with
+    the body and the layout sketches, making the container if needed. Then
+    the file goes into an assembly with Insert Components in one go."""
+    doc = obj.Document
+    if any(p.TypeId == "Assembly::AssemblyObject" for p in doc.Objects):
+        return None                # built inside an assembly: leave it where it is
+    parts = [p for p in doc.Objects if p.TypeId == "App::Part" and _top(p)]
+    part = None
+    if len(parts) == 1:
+        part = parts[0]
+    elif not parts:
+        part = doc.addObject("App::Part", "Part")
+        for b in doc.Objects:
+            if b is not part and b.TypeId == "PartDesign::Body" and _top(b):
+                if b.Label == doc.Label:
+                    b.Label = "Body"            # the Part takes the part's name
+                part.addObject(b)
+        part.Label = doc.Label
+        for o in doc.Objects:
+            if (is_member(o) or type(getattr(o, "Proxy", None)).__name__ in ("EndCap", "Gusset")) \
+                    and o is not obj and _top(o):
+                part.addObject(o)
+                for src in getattr(o, "Path", []) or []:
+                    if _top(src[0]) and src[0].TypeId == "Sketcher::SketchObject":
+                        part.addObject(src[0])
+        # flanges / fasteners already fitted to the part (e.g. on its nozzles)
+        for o in doc.Objects:
+            if o is not part and _top(o) and (
+                    hasattr(o, "StdType") or type(getattr(o, "Proxy", None)).__name__
+                    in ("FSScrewObject", "FSWasherObject", "FSNutObject")):
+                part.addObject(o)
+    else:
+        return None                # several Parts: the user has their own layout
+    if _top(obj):
+        part.addObject(obj)
+    for src in sources:
+        if src is not None and src.TypeId == "Sketcher::SketchObject" and _top(src):
+            part.addObject(src)
+    return part
+
+
 def make(t, size, links, doc=None):
     doc = doc or App.ActiveDocument
     links = _expand(links)
@@ -521,6 +573,7 @@ def make(t, size, links, doc=None):
         except Exception:
             pass
     o.Label = designation(t, size)
+    into_part(o, [lk[0] for lk in links])
     doc.recompute()
     return o
 

@@ -33,6 +33,7 @@ TABS = [
         None,
         ("Extruded\nCut", "MechFlow_CutExtrude"),
         ("Hole\nWizard", "MechFlow_HoleWizard"),
+        ("Nozzle", "MechFlow_Nozzle"),
         ("Revolved\nCut", "MechFlow_CutRevolve"),
         ("stack", [("Swept Cut", "MechFlow_CutSweep"),
                    ("Lofted Cut", "MechFlow_CutLoft"),

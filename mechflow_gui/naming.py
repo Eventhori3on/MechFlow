@@ -91,6 +91,16 @@ def name_body_after_part(doc):
         return
     body = bodies[0]
     previous = _body_labels.get(doc.Name)
+    try:
+        part = body.getParentGeoFeatureGroup()
+    except Exception:
+        part = None
+    if part is not None and part.TypeId == "App::Part":
+        # a weldment part: the Part carries the name, the body stays "Body"
+        if part.Label == previous or part.Label.startswith("Part"):
+            part.Label = doc.Label
+            _body_labels[doc.Name] = part.Label
+        return
     if body.Label.startswith("Body") or body.Label == previous:
         body.Label = doc.Label
         _body_labels[doc.Name] = body.Label

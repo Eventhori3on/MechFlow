@@ -69,11 +69,15 @@ class EndCap:
         obj.addProperty("App::PropertyEnumeration", "Direction", "End cap",
                         "Outward: on the end. Inward: inside the end, flush")
         obj.Direction = ["Outward", "Inward"]
+        _base_plate_props(obj)
         obj.Base = base
         obj.Thickness = thickness
         obj.Inset = inset
         obj.Direction = "Outward" if outward else "Inward"
         obj.Proxy = self
+
+    def onDocumentRestored(self, obj):
+        _base_plate_props(obj)
 
     def execute(self, obj):
         import Part
@@ -82,6 +86,13 @@ class EndCap:
         n = _normal(f)
         t = float(obj.Thickness)
         inset = float(obj.Inset)
+        w = float(getattr(obj, "PlateWidth", 0))
+        ln = float(getattr(obj, "PlateLength", 0)) or w
+        if obj.Direction == "Outward" and w > 0:
+            obj.Shape = base_plate_shape(f, n, w, ln, t, float(obj.HoleDiameter),
+                                         float(obj.HoleEdge))
+            obj.Placement = App.Placement()
+            return
         if obj.Direction == "Outward":
             plate = Part.Face(f.OuterWire)
             if inset > 1e-6:
@@ -104,6 +115,55 @@ class EndCap:
         return None
 
 
+def _base_plate_props(obj):
+    """Base plate options (added to older end caps when they're opened)."""
+    if not hasattr(obj, "PlateWidth"):
+        obj.addProperty("App::PropertyLength", "PlateWidth", "Base plate",
+                        "Plate size across (0: the member's own size)")
+        obj.addProperty("App::PropertyLength", "PlateLength", "Base plate",
+                        "Plate size the other way (0: same as the width)")
+        obj.addProperty("App::PropertyLength", "HoleDiameter", "Base plate",
+                        "Anchor / holding-down bolt holes, one in each corner (0: none)")
+        obj.addProperty("App::PropertyLength", "HoleEdge", "Base plate",
+                        "Hole centre in from the plate's edges")
+        obj.HoleEdge = 30.0
+
+
+def _plate_axes(face, n):
+    """In-plane directions for a plate on a member's end: along its straight
+    sides, or the nearest of X / Y for a round tube."""
+    for e in face.OuterWire.Edges:
+        if type(e.Curve).__name__ in ("Line", "LineSegment"):
+            u = e.Vertexes[-1].Point - e.Vertexes[0].Point
+            u = u - n * u.dot(n)
+            if u.Length > 1e-6:
+                u.normalize()
+                return u, n.cross(u)
+    for a in (App.Vector(1, 0, 0), App.Vector(0, 1, 0), App.Vector(0, 0, 1)):
+        u = a - n * a.dot(n)
+        if u.Length > 0.1:
+            u.normalize()
+            return u, n.cross(u)
+    return App.Vector(1, 0, 0), App.Vector(0, 1, 0)
+
+
+def base_plate_shape(face, n, w, ln, t, hole_d=0.0, edge=30.0):
+    """A w x ln plate on a member's end face, centred on it, t thick, with
+    a hole in each corner."""
+    import Part
+    c = Part.Face(face.OuterWire).CenterOfMass
+    u, v = _plate_axes(face, n)
+    pts = [c + u * (su * w / 2) + v * (sv * ln / 2)
+           for su, sv in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
+    plate = Part.Face(Part.makePolygon(pts + [pts[0]])).extrude(n * t)
+    if hole_d > 0:
+        for su in (-1, 1):
+            for sv in (-1, 1):
+                hc = c + u * (su * (w / 2 - edge)) + v * (sv * (ln / 2 - edge))
+                plate = plate.cut(Part.makeCylinder(hole_d / 2, t + 2, hc - n, n))
+    return plate
+
+
 def wall_of(face):
     """Wall thickness of a hollow end face (0 if solid)."""
     if len(face.Wires) < 2:
@@ -113,18 +173,23 @@ def wall_of(face):
     return max(0.0, (ob.DiagonalLength - ib.DiagonalLength) / (2 * math.sqrt(2)))
 
 
-def make_end_cap(base, thickness=5.0, inset=None, outward=True):
+def make_end_cap(base, thickness=5.0, inset=None, outward=True, plate=None):
     doc = base[0].Document
     f = _face(base[0], base[1][0])
     if inset is None:
         inset = round(0.5 * wall_of(f), 2)
     o = doc.addObject("Part::FeaturePython", "EndCap")
     EndCap(o, base, thickness, inset, outward)
+    if plate and outward:
+        o.PlateWidth, o.PlateLength, o.HoleDiameter, o.HoleEdge = plate
     if App.GuiUp:
         ViewProviderEndCap(o.ViewObject)
         o.ViewObject.ShapeColor = (0.62, 0.66, 0.72)
     from mechflow_gui import toolbox
-    o.Label = toolbox.instance_label(doc, f"End cap PL{thickness:g}")
+    kind = "Base plate" if plate and outward and plate[0] > 0 else "End cap"
+    o.Label = toolbox.instance_label(doc, f"{kind} PL{thickness:g}")
+    from mechflow_gui import weldments
+    weldments.into_part(o)
     doc.recompute()
     return o
 
@@ -201,6 +266,8 @@ def make_gusset(a, b, d1=100.0, d2=100.0, thickness=10.0, relief=10.0):
         o.ViewObject.ShapeColor = (0.62, 0.66, 0.72)
     from mechflow_gui import toolbox
     o.Label = toolbox.instance_label(doc, f"Gusset PL{thickness:g}")
+    from mechflow_gui import weldments
+    weldments.into_part(o)
     doc.recompute()
     return o
 
@@ -216,6 +283,9 @@ def plate_row(o):
     dims = sorted([bb.XLength, bb.YLength, bb.ZLength])
     if type(o.Proxy).__name__ == "Gusset":
         return f"Gusset PL{t:g}", f"{float(o.D1):g} x {float(o.D2):g}"
+    if float(getattr(o, "PlateWidth", 0)) > 0 and o.Direction == "Outward":
+        holes = f", 4 holes \u00d8{float(o.HoleDiameter):g}" if float(o.HoleDiameter) > 0 else ""
+        return f"Base plate PL{t:g}", f"{dims[2]:.0f} x {dims[1]:.0f}{holes}"
     return f"End cap PL{t:g}", f"{dims[2]:.0f} x {dims[1]:.0f}"
 
 
@@ -294,6 +364,21 @@ class EndCapPanel(_Panel):
         self.dir.addItems(["Outward", "Inward"])
         f.addRow("Direction", self.dir)
         self.lay.addLayout(f)
+        bp = QtWidgets.QGroupBox("Base plate (bigger than the member)")
+        bp.setCheckable(True)
+        bp.setChecked(False)
+        self.base_box = bp
+        g = QtWidgets.QFormLayout(bp)
+        self.pw, self.pl, self.hd, self.he = (QtWidgets.QDoubleSpinBox() for _ in range(4))
+        for w, v, lab in ((self.pw, 200, "Width"), (self.pl, 200, "Length"),
+                          (self.hd, 18, "Hole \u00d8 (0: none)"), (self.he, 30, "Hole in from edge")):
+            w.setRange(0, 5000)
+            w.setValue(v)
+            w.setSuffix(" mm")
+            g.addRow(lab, w)
+            w.valueChanged.connect(self._update)
+        bp.toggled.connect(self._update)
+        self.lay.addWidget(bp)
         self.list = QtWidgets.QListWidget()
         self.list.setMaximumHeight(90)
         self.lay.addWidget(QtWidgets.QLabel("<b>End faces</b>"))
@@ -329,8 +414,11 @@ class EndCapPanel(_Panel):
         self.list.clear()
         for obj, sub in self.picks:
             inset = None if self.inset.value() < 0 else self.inset.value()
+            plate = None
+            if self.base_box.isChecked():
+                plate = (self.pw.value(), self.pl.value(), self.hd.value(), self.he.value())
             o = make_end_cap((obj, [sub]), self.thick.value(), inset,
-                             self.dir.currentText() == "Outward")
+                             self.dir.currentText() == "Outward", plate)
             self.made.append(o)
             self.list.addItem(f"{obj.Label}: {sub}")
         self.msg.setText("Click the end faces of tubes or members to cap them."

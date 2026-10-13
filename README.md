@@ -35,7 +35,13 @@ Each feature has its own panel, and you edit it again by double-clicking.
 - **Revolved** Boss/Cut, **Swept** and **Lofted** Boss/Cut.
 - **Fillet** and **Chamfer** on many edges at once, **Shell**, **Draft**,
   **Hole Wizard** (ISO M3–M20: simple, counterbore, countersink, tapped;
-  ISO 273 close / normal / loose clearance).
+  ISO 273 close / normal / loose clearance; Blind, **Up To Next** - through
+  the first wall only, for tanks and hollow parts - or Through All).
+- **Nozzle:** click a tank or vessel wall, flat or curved, pick the pipe
+  (EN 10220 or ASME B36.10M) and its standout: the stub is shaped to meet the
+  shell, the wall it sits on is bored (only that wall), and a weld neck or
+  plate flange can go straight on the end. Position it exactly by typing X,
+  Y, Z; point it square to the face or along an axis.
 - **Linear Pattern** (with a spacing drag arrow), **Circular Pattern**,
   **Mirror**.
 - **Reference Plane** (offset, at angle, mid plane, through a point, 3 points,
@@ -70,8 +76,12 @@ Each feature has its own panel, and you edit it again by double-clicking.
   square to its face. Rotate or mirror the profile; double-click to edit.
 - **Trim/Extend:** trim or extend one member group's free ends to other
   members (cut square to the face) or to any body (cut to its shape).
-- **End Cap** on tube ends (outward or inward, inset) and **Gusset** plates
-  between two member faces (legs, thickness, corner relief).
+- **End Cap** on tube ends (outward or inward, inset), or a bigger **base
+  plate** with an anchor hole in each corner, and **Gusset** plates between
+  two member faces (legs, thickness, corner relief).
+- A weldment part stays **one part**: members, plates and gussets go into a
+  Part container with the body (named after the file), so Insert Components
+  brings the whole thing into an assembly.
 - **Cut List:** members grouped by section and length, with the cut angles,
   plus end caps and gussets, saved as a spreadsheet.
 
@@ -111,13 +121,17 @@ Each feature has its own panel, and you edit it again by double-clicking.
     blind, RF (Class 150 and 300, NPS 1/2-12).
   - **Pipe:** EN 10220 (ISO 4200 sizes) and ASME B36.10M (Sch 10/40/80), any
     length.
-  - **Pipe fittings:** ASME B16.9 90 and 45 deg long radius elbows, equal
-    tees, concentric reducers and caps.
+  - **Pipe fittings:** EN 10253-2 90 deg elbows (2D, 3D, 5D), 45 deg 3D
+    elbows, equal tees, concentric reducers and caps, with the EN 10220 pipe
+    wall; ASME B16.9 90 and 45 deg long radius elbows, equal tees,
+    concentric reducers and caps. **Outlet points** turns an elbow or tee's
+    branch up, down, left, right, front or back as it's placed.
   - **Bearings:** ISO 15 deep groove ball bearings, 60xx, 62xx and 63xx.
   - Click a pipe end and a flange or fitting sizes itself to the pipe; click
     a shaft end or housing bore for a bearing. Change size or rating later in
     the properties.
-  - **Flange joints:** click a flange's face to bolt another flange (or a
+  - **Flange joints:** click a flange's face - also one inside an inserted
+    part, like a tank's nozzle flange - to bolt another flange (or a
     blind) to it: it turns to face it, with a gasket (EN 1514-1 IBC / ASME
     B16.21) and the bolts and nuts from the flange table.
   - **Fasteners:** ISO, DIN, EN and ASME screws, nuts, washers, pins and

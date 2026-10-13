@@ -211,6 +211,10 @@ class Stack:
             open_lo, open_hi = self._open(es[0], es[0].plo, -1), self._open(es[0], es[0].phi, 1)
         else:
             open_lo = open_hi = True
+        if len(es) == 1 and open_lo and open_hi and not tapped:
+            # e.g. a base plate's anchor holes: there's nothing to bolt it to
+            self.reason = "through one part only (nothing to fasten it to)"
+            return False
         if len(es) == 1 and open_lo != open_hi:
             self.head_hi = open_hi          # a blind hole: in from its open end
         elif tapped:

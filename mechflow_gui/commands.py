@@ -681,6 +681,10 @@ def register():
         "Toolbox", "Standard parts (ISO, DIN, ASME screws, nuts, washers, pins): pick one "
         "and click holes - it sizes itself to each hole", icon_path("Toolbox.svg"),
         lambda: _run("toolbox", "toolbox"), lambda: True))
+    Gui.addCommand("MechFlow_Nozzle", _simple(
+        "Nozzle", "Pipe stub on a tank or vessel wall (flat or curved): bores the wall "
+        "it sits on and can add a flange on the end", icon_path("Nozzle.svg"),
+        lambda: _run("nozzle", "create"), lambda: App.ActiveDocument is not None))
     Gui.addCommand("MechFlow_StructuralMember", _simple(
         "Structural Member", "Steel sections (UKB, UKC, PFC, angle, SHS, RHS, CHS) along "
         "sketch lines, cut at the corners", icon_path("StructuralMember.svg"),

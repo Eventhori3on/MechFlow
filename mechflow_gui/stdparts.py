@@ -36,6 +36,13 @@ TYPES = {
     "ASMEB16.9-TEE": ("Pipe Fittings", "ASME", "ASME B16.9  Equal tee", "Equal tee"),
     "ASMEB16.9-RED": ("Pipe Fittings", "ASME", "ASME B16.9  Concentric reducer", "Concentric reducer"),
     "ASMEB16.9-CAP": ("Pipe Fittings", "ASME", "ASME B16.9  Cap", "Cap"),
+    "EN10253-90-3D": ("Pipe Fittings", "EN", "EN 10253-2  90° elbow 3D (R = 1.5 x DN)", "90 deg elbow 3D"),
+    "EN10253-90-2D": ("Pipe Fittings", "EN", "EN 10253-2  90° elbow 2D (R = 1.0 x DN)", "90 deg elbow 2D"),
+    "EN10253-90-5D": ("Pipe Fittings", "EN", "EN 10253-2  90° bend 5D (R = 2.5 x DN)", "90 deg bend 5D"),
+    "EN10253-45-3D": ("Pipe Fittings", "EN", "EN 10253-2  45° elbow 3D", "45 deg elbow 3D"),
+    "EN10253-TEE": ("Pipe Fittings", "EN", "EN 10253-2  Equal tee", "Equal tee"),
+    "EN10253-RED": ("Pipe Fittings", "EN", "EN 10253-2  Concentric reducer", "Concentric reducer"),
+    "EN10253-CAP": ("Pipe Fittings", "EN", "EN 10253-2  Cap", "Cap"),
     "ISO15-60": ("Bearings", "ISO", "ISO 15  Deep groove ball bearing 60xx", "Deep groove ball bearing"),
     "ISO15-62": ("Bearings", "ISO", "ISO 15  Deep groove ball bearing 62xx", "Deep groove ball bearing"),
     "ISO15-63": ("Bearings", "ISO", "ISO 15  Deep groove ball bearing 63xx", "Deep groove ball bearing"),
@@ -63,6 +70,32 @@ def catalog(standard=None):
     return out
 
 
+# EN sizes with an EN 10253 / ASME B16.9 fitting (DN -> NPS for the lengths)
+DN_NPS = {15: "1/2", 20: "3/4", 25: "1", 32: "1-1/4", 40: "1-1/2", 50: "2", 65: "2-1/2",
+          80: "3", 100: "4", 125: "5", 150: "6", 200: "8", 250: "10", 300: "12"}
+
+
+def _dn(size, small=False):
+    """'DN80 x DN50' -> 80 (or 50 with small=True); 'DN80' -> 80."""
+    parts = [p.strip() for p in size.split(" x ")]
+    return int((parts[1] if small and len(parts) > 1 else parts[0])[2:])
+
+
+def en_fitting_dims(t, size):
+    """EN 10253-2 fitting in mm: (od, wall, radius / centre-to-end, tee C,
+    reducer H, cap E, small od, small wall). Lengths are the EN 10253-2
+    series values (the ASME B16.9 lengths rounded to the mm); the wall is
+    the EN 10220 pipe's, so the fitting matches the pipe it's welded to."""
+    big = _dn(size)
+    od, wall = en_pipe(f"DN{big}")
+    A, C, H, E = (round(x * IN) if x is not None else None for x in T.B169[DN_NPS[big]])
+    radius = {"3D": A, "2D": round(A / 1.5), "5D": round(A * 5 / 3)}.get(t.split("-")[-1], A)
+    od2 = wall2 = None
+    if t == "EN10253-RED":
+        od2, wall2 = en_pipe(f"DN{_dn(size, small=True)}")
+    return od, wall, radius, C, H, E, od2, wall2
+
+
 def _reductions():
     out = []
     for i, big in enumerate(T.NPS):
@@ -80,6 +113,17 @@ def sizes(t):
         return [f"DN{dn}" for dn in T.EN_PN16]
     if t == "ASMEB16.9-RED":
         return _reductions()
+    if t == "EN10253-RED":
+        dns = list(DN_NPS)
+        out = []
+        for i, big in enumerate(dns):
+            if T.B169[DN_NPS[big]][2] is None:
+                continue
+            for small in reversed(dns[max(0, i - 2):i]):
+                out.append(f"DN{big} x DN{small}")
+        return out
+    if t.startswith("EN10253"):
+        return [f"DN{dn}" for dn in DN_NPS]
     if t.startswith("ASME"):
         return [f"NPS {n}" for n in T.NPS]
     if t.startswith("ISO15-"):
@@ -110,6 +154,8 @@ def default_size(t):
     if t.startswith("ISO15-"):
         return s[4] if len(s) > 4 else s[0]
     want = "DN50" if t.startswith("EN") else ("NPS 2 x 1-1/2" if t == "ASMEB16.9-RED" else "NPS 2")
+    if t == "EN10253-RED":
+        want = "DN50 x DN40"
     return want if want in s else s[0]
 
 
@@ -145,6 +191,15 @@ def designation(t, size, rating, length=None):
         kind = {"90LR": "Elbow 90 LR", "45LR": "Elbow 45 LR", "TEE": "Tee",
                 "RED": "Reducer", "CAP": "Cap"}[t.split("-")[-1]]
         return f"{kind} {nps_label(size)} {rating} ASME B16.9"
+    if t.startswith("EN10253"):
+        od, wall = en_pipe(f"DN{_dn(size)}")
+        kind = t[len("EN10253-"):]
+        name = {"90-3D": "Elbow 90 3D", "90-2D": "Elbow 90 2D", "90-5D": "Bend 90 5D",
+                "45-3D": "Elbow 45 3D", "TEE": "Tee", "RED": "Reducer", "CAP": "Cap"}[kind]
+        if kind == "RED":
+            od2, wall2 = en_pipe(f"DN{_dn(size, small=True)}")
+            return f"{name} {size} {od:g}x{wall:g}-{od2:g}x{wall2:g} EN 10253-2"
+        return f"{name} {size} {od:g}x{wall:g} EN 10253-2"
     if t.startswith("ISO15-"):
         return f"{size} ISO 15"
     if t == "EN1514-1-IBC":
@@ -177,8 +232,8 @@ def asme_pipe(size, schedule):
 
 def outside_diameter(t, size, rating):
     """The pipe OD a part connects to (used to size it from an edge)."""
-    if t.startswith("EN1092") or t == "EN10220-PIPE":
-        return T.EN_PN16[int(size[2:])]["A"]
+    if t.startswith("EN1092") or t == "EN10220-PIPE" or t.startswith("EN10253"):
+        return T.EN_PN16[_dn(size)]["A"]
     if t.startswith("ASME"):
         return T.ASME_PIPE[_nps(size)][0] * IN
     return None
@@ -305,44 +360,17 @@ def shape_for(t, size, rating, length=1000.0):
         big = _nps(size)
         od, wall = asme_pipe(big, rating)
         A, C, H, E = (x * IN if x is not None else None for x in T.B169[big])
-        if kind in ("90LR", "45LR"):
-            ang = 90 if kind == "90LR" else 45
-            # sweep about an axis A away from the centre line, starting up +Z
-
-            def bend(r):
-                disc = Part.Face(Part.Wire(Part.makeCircle(r)))
-                return disc.revolve(V(A, 0, 0), V(0, 1, 0), ang)
-            return _clean(bend(od / 2).cut(bend(od / 2 - wall)))
-        if kind == "TEE":
-            run = Part.makeCylinder(od / 2, 2 * C, V(0, 0, 0))
-            br = Part.makeCylinder(od / 2, C, V(0, 0, C), V(1, 0, 0))
-            solid = run.fuse(br)
-            hole = Part.makeCylinder(od / 2 - wall, 2 * C + 2, V(0, 0, -1)).fuse(
-                Part.makeCylinder(od / 2 - wall, C + 1, V(0, 0, C), V(1, 0, 0)))
-            return _clean(solid.cut(hole))
+        od2 = wall2 = None
         if kind == "RED":
-            small = _nps(size, small=True)
-            od2, wall2 = asme_pipe(small, rating)
-            straight = min(0.12 * H, 0.5 * IN)
-            outer = _revolve([(0, 0), (od / 2, 0), (od / 2, straight),
-                              (od2 / 2, H - straight), (od2 / 2, H), (0, H)])
-            inner = _revolve([(0, -1), (od / 2 - wall, -1), (od / 2 - wall, straight),
-                              (od2 / 2 - wall2, H - straight), (od2 / 2 - wall2, H + 1), (0, H + 1)])
-            return _clean(outer.cut(inner))
-        if kind == "CAP":
-            head = od / 4
-            straight = max(E - head, 0.1)
-
-            def capsolid(r, extra):
-                cyl = Part.makeCylinder(r, straight + extra, V(0, 0, -extra))
-                sph = Part.makeSphere(r, V(0, 0, 0))
-                m = App.Matrix()
-                m.scale(1, 1, (head - (od / 2 - r)) / r)
-                ell = sph.transformGeometry(m)
-                ell.translate(V(0, 0, straight))
-                top = ell.common(Part.makeCylinder(r + 1, r + 1, V(0, 0, straight)))
-                return cyl.fuse(top)
-            return _clean(capsolid(od / 2, 0).cut(capsolid(od / 2 - wall, 1)))
+            od2, wall2 = asme_pipe(_nps(size, small=True), rating)
+        kind = {"90LR": "ELB", "45LR": "ELB"}.get(kind, kind)
+        ang = 45 if t.endswith("45LR") else 90
+        return _fitting(kind, od, wall, A, ang, C, H, E, od2, wall2)
+    if t.startswith("EN10253"):
+        od, wall, R, C, H, E, od2, wall2 = en_fitting_dims(t, size)
+        kind = t.split("-")[1]
+        ang = {"90": 90, "45": 45}.get(kind)
+        return _fitting("ELB" if ang else kind, od, wall, R, ang or 90, C, H, E, od2, wall2)
     if t.startswith("ISO15-"):
         d, D, B, r = T.BEARINGS[t[-2:]][size]
         pm = (d + D) / 4                     # pitch radius
@@ -363,6 +391,79 @@ def shape_for(t, size, rating, length=1000.0):
                  for i in range(z)]
         return Part.makeCompound([_clean(inner), _clean(outer)] + balls)
     raise ValueError(f"Unknown standard part {t}")
+
+
+def _fitting(kind, od, wall, A, ang, C, H, E, od2=None, wall2=None):
+    """Butt-weld fitting, inlet at z = 0 running up +Z. Elbows turn towards
+    +X (bend radius A); a tee's branch points +X."""
+    import Part
+    if kind == "ELB":
+        # sweep about an axis A away from the centre line, starting up +Z
+        def bend(r):
+            disc = Part.Face(Part.Wire(Part.makeCircle(r)))
+            return disc.revolve(V(A, 0, 0), V(0, 1, 0), ang)
+        return _clean(bend(od / 2).cut(bend(od / 2 - wall)))
+    if kind == "TEE":
+        run = Part.makeCylinder(od / 2, 2 * C, V(0, 0, 0))
+        br = Part.makeCylinder(od / 2, C, V(0, 0, C), V(1, 0, 0))
+        solid = run.fuse(br)
+        hole = Part.makeCylinder(od / 2 - wall, 2 * C + 2, V(0, 0, -1)).fuse(
+            Part.makeCylinder(od / 2 - wall, C + 1, V(0, 0, C), V(1, 0, 0)))
+        return _clean(solid.cut(hole))
+    if kind == "RED":
+        straight = min(0.12 * H, 0.5 * IN)
+        outer = _revolve([(0, 0), (od / 2, 0), (od / 2, straight),
+                          (od2 / 2, H - straight), (od2 / 2, H), (0, H)])
+        inner = _revolve([(0, -1), (od / 2 - wall, -1), (od / 2 - wall, straight),
+                          (od2 / 2 - wall2, H - straight), (od2 / 2 - wall2, H + 1), (0, H + 1)])
+        return _clean(outer.cut(inner))
+    if kind == "CAP":
+        head = od / 4
+        straight = max(E - head, 0.1)
+
+        def capsolid(r, extra):
+            cyl = Part.makeCylinder(r, straight + extra, V(0, 0, -extra))
+            sph = Part.makeSphere(r, V(0, 0, 0))
+            m = App.Matrix()
+            m.scale(1, 1, (head - (od / 2 - r)) / r)
+            ell = sph.transformGeometry(m)
+            ell.translate(V(0, 0, straight))
+            top = ell.common(Part.makeCylinder(r + 1, r + 1, V(0, 0, straight)))
+            return cyl.fuse(top)
+        return _clean(capsolid(od / 2, 0).cut(capsolid(od / 2 - wall, 1)))
+    raise ValueError(f"Unknown fitting {kind}")
+
+
+def outlet_direction(t, rating=None):
+    """Local direction an elbow's outlet / a tee's branch points (Spin 0),
+    or None for parts without one."""
+    if t.endswith("90LR") or t.startswith("EN10253-90"):
+        return V(1, 0, 0)
+    if t.endswith("45LR") or t.startswith("EN10253-45"):
+        return V(math.sin(math.radians(45)), 0, math.cos(math.radians(45)))
+    if t.endswith("-TEE"):
+        return V(1, 0, 0)
+    return None
+
+
+def aim(obj, target):
+    """Spin an elbow / tee so its outlet points as near as it can to the
+    global direction target (SOLIDWORKS: pick the direction as you place)."""
+    if outlet_direction(obj.StdType) is None:
+        return False
+    target = V(target)
+    if target.Length < 1e-9:
+        return False
+    target.normalize()
+    obj.Spin = 0
+    obj.recompute()
+    rot = obj.Placement.Rotation
+    local = rot.inverted().multVec(target)
+    if math.hypot(local.x, local.y) < 1e-6:
+        return False               # straight along the inlet axis: any spin will do
+    obj.Spin = math.degrees(math.atan2(local.y, local.x))
+    obj.recompute()
+    return True
 
 
 # ---------------------------------------------------------------- the object
@@ -464,7 +565,7 @@ class ViewProviderStdPart:
         t = getattr(getattr(self, "Object", None), "StdType", "")
         if t.startswith("ISO15-"):
             return icon_path("Bearing.svg")
-        if "PIPE" in t or t.startswith("ASMEB16.9"):
+        if "PIPE" in t or t.startswith("ASMEB16.9") or t.startswith("EN10253"):
             return icon_path("Pipe.svg")
         return icon_path("Flange.svg")
 
@@ -574,23 +675,66 @@ def _inch_value(s):
     return total
 
 
+class _Ref:
+    """A MechFlow flange reached through a link / Part (e.g. a nozzle flange
+    inside an inserted tank): looks like the flange, in assembly axes."""
+
+    def __init__(self, top, prefix, leaf):
+        import Part
+        self.obj, self.prefix, self.leaf = top, prefix, leaf
+        self.StdType, self.Size, self.Rating = leaf.StdType, leaf.Size, leaf.Rating
+        self.Placement = top.getSubObject(prefix, retType=3)
+        self.Shape = Part.getShape(top, prefix)
+        self.Document = leaf.Document
+        self.Label = leaf.Label
+
+
+def _att(base, sub):
+    """(object, sub) to attach to for an edge of base (a flange or _Ref)."""
+    if isinstance(base, _Ref):
+        return base.obj, base.prefix + sub
+    return base, sub
+
+
+def _resolve(obj, sub):
+    """The MechFlow standard part a (possibly link-path) sub points into."""
+    if obj is None or not sub:
+        return None
+    if is_std_object(obj):
+        return obj
+    if "." not in sub:
+        return None
+    prefix = sub.rsplit(".", 1)[0] + "."
+    try:
+        leaf = obj.getSubObjectList(sub)[-1]
+    except Exception:
+        return None
+    if leaf is obj or not is_std_object(leaf):
+        return None
+    return _Ref(obj, prefix, leaf)
+
+
 def joint_with(obj, sub, t):
     """If the picked edge is the face (raised face or OD) of a MechFlow
-    flange, return that flange - the new part bolts to it."""
+    flange, return that flange - the new part bolts to it. Works through
+    links too (a flange in an inserted part): then a _Ref is returned."""
     import Part
-    if not (is_flange(t) or is_gasket(t)) or obj is None or not is_std_object(obj):
+    if not (is_flange(t) or is_gasket(t)) or obj is None:
         return None
-    if not is_flange(obj.StdType) or family(obj.StdType) != family(t):
+    base = _resolve(obj, sub)
+    if base is None:
+        return None
+    if not is_flange(base.StdType) or family(base.StdType) != family(t):
         return None
     try:
         e = Part.getShape(obj, sub, needSubElement=True, noElementMap=True)
         d = 2 * e.Curve.Radius
     except Exception:
         return None
-    info = flange_info(obj.StdType, obj.Size, obj.Rating)
+    info = flange_info(base.StdType, base.Size, base.Rating)
     if min(abs(d - info["face"]), abs(d - info["OD"])) > 0.6:
         return None
-    return obj
+    return base
 
 
 def _face_frame(base):
@@ -677,8 +821,9 @@ def bolt_set(container, base, mate, gap):
         length = _pick(btype, bname, need, metric)
     made = []
     for sub in _hole_edges(base, face, n, info["L"] / 2, back=True):
-        made.append(toolbox.make(container, btype, (base, [sub]), bname, length,
-                                 invert=toolbox._outward(base, sub) is False))
+        o, s_ = _att(base, sub)
+        made.append(toolbox.make(container, btype, (o, [s_]), bname, length,
+                                 invert=toolbox._outward(o, s_) is False))
     mface = face + n * gap
     for sub in _hole_edges(mate, mface, n, minfo["L"] / 2, back=False):
         made.append(toolbox.make(container, ntype, (mate, [sub]), nname,
@@ -729,7 +874,7 @@ def _place_joint(container, t, base, sub, size, rating, with_bolts):
     gt = "EN1514-1-IBC" if family(t) == "EN" else "ASMEB16.21"
     gap = gasket_dims(gt, size, rating)[2]
     made = []
-    attach = (base, [sub])
+    attach = (base.obj if isinstance(base, _Ref) else base, [sub])
     if is_gasket(t):
         g = make(container, t, size, rating, attach=attach)
         _seat_on_face(g, base, 0.0, flip=False)
