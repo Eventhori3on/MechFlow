@@ -184,6 +184,19 @@ TABS = [
         ("Make\nDrawing", "MechFlow_MakeDrawing"),
         ("Supplier\nPack", "MechFlow_SupplierPack"),
     ]),
+    ("Routing", [
+        ("3D\nSketch", "MechFlow_Sketch3D"),
+        ("Route\nPipe", "MechFlow_RoutePipe"),
+        ("Valves &\nInstruments", "MechFlow_Valves"),
+        ("Author\nComponent", "MechFlow_AuthorComponent"),
+        None,
+        ("stack", [("Toolbox", "MechFlow_Toolbox"),
+                   ("Nozzle", "MechFlow_Nozzle"),
+                   ("Smart Fasteners", "MechFlow_SmartFasteners")]),
+        None,
+        ("stack", [("Bill of Materials", "MechFlow_BOM"),
+                   ("Interference Detection", "MechFlow_Interference")]),
+    ]),
 ]
 
 # Fallbacks for commands renamed between FreeCAD versions.

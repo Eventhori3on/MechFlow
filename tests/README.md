@@ -38,6 +38,9 @@ pops up an unexpected dialog.
 | `t_config` | Configurations and the design table |
 | `t_stress` | Stress Check: cantilever against hand calculation (deflection and stress), study kept with the part |
 | `t_supplier` | Supplier Pack: PDFs incl. exploded view, STEP, DXF flat of a plate (holes), BOM, zip; Exploded View on and off |
+| `t_sketch3d` | 3D Sketch: starts snapped on a flange, mouse lines lock to X and round to 10 mm, typed lines, length edit moves later lines, branch, rename; Route Pipe follows it and rebuilds on edit |
+| `t_valves` | Valves & Instruments: ball, gate, butterfly valves and a gauge on a route; pipe splits, flanges and bolts, ring drag to 90°, slide, refusal when there's no room, reopen |
+| `t_author` | Author Component: a turned strainer (2 ports) and a level switch (1 port) saved to the routing library, then placed and bolted on a route |
 
 ## Running
 

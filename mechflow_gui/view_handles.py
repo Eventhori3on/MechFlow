@@ -127,6 +127,7 @@ class Arrow(_Handle):
         _on_top(root)
         tf = coin.SoTransform()
         tf.translation = (origin.x, origin.y, origin.z)
+        self._tf = tf
         q = App.Rotation(App.Vector(1, 0, 0), self.dir).Q
         tf.rotation.setValue(q[0], q[1], q[2], q[3])
         root.addChild(tf)
@@ -159,6 +160,56 @@ class Arrow(_Handle):
     def tip(self):
         return self.origin + self.dir * self.last
 
+    def move_origin(self, p):
+        """Shift the whole arrow (its value stays)."""
+        p = App.Vector(p)
+        if (p - self.origin).Length < 1e-6:
+            return
+        self.origin = p
+        self._tf.translation = (p.x, p.y, p.z)
+
+
+def _ring(rgb, alpha, r0=0.82, r1=1.0, n=72):
+    """A flat ring band in the XY plane (radius r0..r1)."""
+    from pivy import coin
+    sep = coin.SoSeparator()
+    mat = coin.SoMaterial()
+    mat.diffuseColor = rgb
+    mat.emissiveColor = tuple(c * 0.6 for c in rgb)
+    mat.transparency = alpha
+    sep.addChild(mat)
+    hints = coin.SoShapeHints()
+    hints.vertexOrdering = coin.SoShapeHints.COUNTERCLOCKWISE
+    hints.shapeType = coin.SoShapeHints.UNKNOWN_SHAPE_TYPE
+    sep.addChild(hints)
+    pts = []
+    for i in range(n):
+        a = 2.0 * math.pi * i / n
+        pts.append((r0 * math.cos(a), r0 * math.sin(a), 0.0))
+        pts.append((r1 * math.cos(a), r1 * math.sin(a), 0.0))
+    co = coin.SoCoordinate3()
+    co.point.setValues(0, len(pts), pts)
+    sep.addChild(co)
+    idx = []
+    for i in range(n):
+        a, b = 2 * i, 2 * ((i + 1) % n)
+        idx += [a, b, b + 1, a + 1, -1]
+    fs = coin.SoIndexedFaceSet()
+    fs.coordIndex.setValues(0, len(idx), idx)
+    sep.addChild(fs)
+    return sep
+
+
+def _ring_parts(dragger):
+    """Give a SoRotateDiscDragger a coloured ring band instead of its whole-disc
+    geometry: only the band can be grabbed, so handles inside the circle (a
+    slide arrow) stay reachable, and it shows up on light backgrounds."""
+    try:
+        dragger.setPart("rotator", _ring((0.95, 0.55, 0.1), 0.25))
+        dragger.setPart("rotatorActive", _ring((1.0, 0.75, 0.2), 0.0))
+    except Exception:
+        pass
+
 
 class Disc(_Handle):
     """Drag round the line through `centre` along `axis`; value() in degrees."""
@@ -179,6 +230,7 @@ class Disc(_Handle):
         sc.scaleFactor = (scale, scale, scale)
         root.addChild(sc)
         self.dragger = coin.SoRotateDiscDragger()
+        _ring_parts(self.dragger)
         root.addChild(self.dragger)
         self.scale = scale
         self._attach(root)

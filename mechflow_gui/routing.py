@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """Pipe routing (SOLIDWORKS Routing, simplified).
 
-Sketch the pipe's centreline - lines in one sketch or several (for a 3D
-run), branches allowed - and Route Pipe fills it in:
+Draw the pipe's centreline - a 3D Sketch (sketch3d.py), or lines in one
+sketch or several - branches allowed - and Route Pipe fills it in:
 
 - pipe cut to length on every straight,
 - an elbow at every bend (EN 10253 2D / 3D / 5D or ASME long radius; other
@@ -268,6 +268,23 @@ def plan(route_like, starts=()):
         else:
             trim[(i, j)] = 0.0
         end_info.append((mode, i))
+    # inline components (valves) split the runs; instruments sit on them
+    comps = route_like.get("components", [])
+    on_run = {}
+    gt = "EN1514-1-IBC" if std == "EN" else "ASMEB16.21"
+    for c in comps:
+        best = None
+        for i, j in g.edges():
+            a, b = g.pts[i], g.pts[j]
+            d = b - a
+            L = d.Length
+            d.normalize()
+            s_ = max(0.0, min(L, (V(c["position"]) - a).dot(d)))
+            dist = (a + d * s_ - V(c["position"])).Length
+            if best is None or dist < best[0]:
+                best = (dist, (i, j), s_)
+        if best is not None:
+            on_run.setdefault(best[1], []).append((best[2], c))
     # pipes
     for i, j in g.edges():
         a, b = g.pts[i], g.pts[j]
@@ -275,13 +292,51 @@ def plan(route_like, starts=()):
         L = d.Length
         d.normalize()
         ta, tb = trim.get((i, j), 0.0), trim.get((j, i), 0.0)
-        ln = L - ta - tb
-        if ln < 1.0:
-            raise ValueError(f"the straight from {_fmt(a)} to {_fmt(b)} is too short for "
-                             f"its fittings ({L:.0f} mm, needs more than {ta + tb:.0f} mm)")
-        parts.append({"type": ty["pipe"], "size": size, "rating": rating_pipe,
-                      "length": round(ln, 1), "angle": 0.0, "role": "pipe",
-                      "placement": App.Placement(a + d * ta, _rot(d))})
+        stops = [(ta, None)]
+        for s_, c in sorted(on_run.get((i, j), []), key=lambda t: t[0]):
+            obj = c["obj"]
+            centre = a + d * s_
+            parts.append({"role": "component", "obj": obj, "centre": centre, "dir": d,
+                          "od": od, "length": 0.0, "angle": 0.0, "type": None})
+            if c["end"] == "branch":
+                if s_ < ta + 20 or s_ > L - tb - 20:
+                    raise ValueError(f"{obj.Label} is on a fitting - slide it along the pipe")
+                continue
+            half = c["ftf"] / 2
+            g_ = H = 0.0
+            if c["end"] in ("flanged", "wafer"):
+                from mechflow_gui import stdparts
+                g_ = stdparts.gasket_dims(gt, size, frate)[2]
+                H = stdparts._length_in_part(ty["flange"], size, frate)
+                for side, sgn in (("A", -1), ("B", 1)):
+                    port = centre + d * (sgn * half)
+                    gpos = port + d * (sgn * g_)            # gasket's far face
+                    parts.append({"type": gt, "size": size, "rating": frate, "length": 0.0,
+                                  "angle": 0.0, "role": "comp-gasket", "comp": obj, "side": side,
+                                  "placement": App.Placement(port if sgn > 0 else gpos, _rot(d))})
+                    face = gpos
+                    parts.append({"type": ty["flange"], "size": size, "rating": frate,
+                                  "length": 0.0, "angle": 0.0, "role": "comp-flange",
+                                  "comp": obj, "side": side,
+                                  "placement": App.Placement(face + d * (sgn * H), _rot(d * -sgn))})
+            reach = half + g_ + H
+            stops.append((s_ - reach, obj.Label))
+            stops.append((s_ + reach, obj.Label))
+        stops.append((L - tb, None))
+        for k in range(0, len(stops), 2):
+            s0, s1 = stops[k][0], stops[k + 1][0]
+            ln = s1 - s0
+            if ln < 1.0:
+                who = stops[k + 1][1] or stops[k][1]
+                if who is None:
+                    raise ValueError(f"the straight from {_fmt(a)} to {_fmt(b)} is too short "
+                                     f"for its fittings ({L:.0f} mm, needs more than "
+                                     f"{ta + tb:.0f} mm)")
+                raise ValueError(f"no room for {who} there ({ln:.0f} mm of pipe left) - "
+                                 "slide it along the pipe or move it to a longer straight")
+            parts.append({"type": ty["pipe"], "size": size, "rating": rating_pipe,
+                          "length": round(ln, 1), "angle": 0.0, "role": "pipe",
+                          "placement": App.Placement(a + d * s0, _rot(d))})
     return parts, end_info
 
 
@@ -338,7 +393,8 @@ class ViewProviderPipeRoute:
 
     def claimChildren(self):
         try:
-            return list(self.Object.Parts)
+            from mechflow_gui import inline
+            return inline.components_of(self.Object) + list(self.Object.Parts)
         except Exception:
             return []
 
@@ -350,6 +406,12 @@ class ViewProviderPipeRoute:
 
     def onDelete(self, vobj, subs):
         clear_parts(vobj.Object)
+        try:
+            from mechflow_gui import inline
+            for c in inline.components_of(vobj.Object):
+                c.Document.removeObject(c.Name)
+        except Exception:
+            pass
         return True
 
     def dumps(self):
@@ -390,6 +452,13 @@ def signature(o):
             h.update(_fmt(a).encode() + _fmt(b).encode())
     except Exception as e:
         h.update(str(e).encode())
+    try:
+        from mechflow_gui import inline
+        for c in inline.components_of(o):
+            h.update(json.dumps([c.Name, c.Kind, _fmt(V(c.Position)), round(float(c.Angle), 3),
+                                 bool(c.Reverse), c.Library]).encode())
+    except Exception:
+        pass
     for x, subs in o.StartFlanges:
         for s in subs:
             try:
@@ -443,12 +512,27 @@ def _far_circle(obj, r, from_pt):
 _BUILDING = [0]
 
 
+_AGAIN = set()
+
+
 def build(o):
-    """(Re)make the route's parts. Returns the parts (raises on errors)."""
+    """(Re)make the route's parts. Returns the parts (raises on errors).
+    A build asked for while one is running (a build lets Qt run, so a
+    panel or the live rebuild can ask) is done straight after it instead."""
+    if _BUILDING[0]:
+        _AGAIN.add(o.Name)
+        return list(o.Parts)
     _BUILDING[0] += 1
     try:
-        return _build(o)
+        made = _build(o)
+        for _i in range(3):
+            if o.Name not in _AGAIN:
+                break
+            _AGAIN.discard(o.Name)
+            made = _build(o)
+        return made
     finally:
+        _AGAIN.discard(o.Name)
         _BUILDING[0] -= 1
 
 
@@ -484,10 +568,27 @@ def _build(o):
     s["segments"] = segs
     if not s["Size"]:
         s["Size"] = sizes_for(o.Standard)[0]
+    from mechflow_gui import inline
+    comps = inline.components_of(o)
+    s["components"] = []
+    for c in comps:
+        ftf, end = inline.ftf_and_end(c, o.Standard, s["Size"])
+        s["components"].append({"obj": c, "position": V(c.Position), "ftf": ftf, "end": end})
     parts, ends = plan(s, starts)
+    frate = o.FlangeRating or stdparts.default_rating(ty["flange"])
+    comp_parts = {}
     for p in parts:
+        if p["role"] == "component":
+            c = p["obj"]
+            c.Standard, c.Size, c.Rating = o.Standard, s["Size"], frate
+            c.Position = p["centre"]
+            c.Placement = inline.placement_for(c, p["centre"], p["dir"], p["od"])
+            c.recompute()
+            continue
         part = stdparts.make(container, p["type"], p["size"], p["rating"] or None,
                              p["length"] or 1000.0)
+        if p["role"] in ("comp-gasket", "comp-flange"):
+            comp_parts.setdefault(p["comp"].Name, {})[p["role"] + p["side"]] = part
         if p["angle"]:
             stdparts.set_bend_angle(part, p["angle"])
         part.Placement = p["placement"]
@@ -508,6 +609,29 @@ def _build(o):
                 bl = stdparts.place(container, ty["blind"], part, best[0], joint=True)
                 _tag(bl, o)
                 made += bl
+    # bolts through the components' flanged ends
+    if comp_parts:
+        doc.recompute()
+        gt = "EN1514-1-IBC" if o.Standard == "EN" else "ASMEB16.21"
+        g_ = stdparts.gasket_dims(gt, s["Size"], frate)[2]
+        for c in comps:
+            cp = comp_parts.get(c.Name)
+            if not cp:
+                continue
+            try:
+                if c.EndType == "wafer":
+                    b = stdparts.bolt_set(container, cp["comp-flangeA"], cp["comp-flangeB"],
+                                          2 * g_ + float(c.FaceToFace))
+                else:
+                    b = []
+                    for side in "AB":
+                        b += stdparts.bolt_set(container, cp["comp-flange" + side],
+                                               inline.PortFlange(c, ty["flange"], s["Size"], frate),
+                                               g_)
+                _tag(b, o)
+                made += b
+            except Exception as e:
+                App.Console.PrintWarning(f"MechFlow: {c.Label}: bolts not added ({e})\n")
     ok, bad = [], []
     for m in made:
         try:
@@ -705,6 +829,23 @@ class RoutePanel:
             obj = s.Object
             for sub in (s.SubElementNames or [""]):
                 leaf = sub.rsplit(".", 1)[-1]
+                sk = obj
+                if "." in sub:
+                    try:
+                        sk = obj.getSubObjectList(sub)[-1]
+                    except Exception:
+                        sk = obj
+                from mechflow_gui import sketch3d
+                if sketch3d.is_sketch3d(sk):
+                    # a 3D sketch is always the whole route, and where it
+                    # starts on a flange the pipe bolts on there
+                    if sk in self.links and self.links[sk] is None:
+                        del self.links[sk]
+                    else:
+                        self.links[sk] = None
+                        self._add_anchor_starts(sk)
+                    changed = True
+                    continue
                 if leaf.startswith("Edge"):
                     try:
                         e = Part.getShape(obj, sub, needSubElement=True, noElementMap=True)
@@ -743,6 +884,19 @@ class RoutePanel:
                 changed = True
         return changed
 
+    def _add_anchor_starts(self, sk):
+        from mechflow_gui import stdparts
+        flange = types_for(self.std.currentText())["flange"]
+        for o, subs in sk.Anchors:
+            for sub in subs:
+                if (o, sub) in self.starts:
+                    continue
+                try:
+                    if stdparts.joint_with(o, sub, flange) is not None:
+                        self.starts.append((o, sub))
+                except Exception:
+                    pass
+
     def _poll(self):
         try:
             sel = Gui.Selection.getSelectionEx("", 0)
@@ -772,8 +926,9 @@ class RoutePanel:
         self._refresh_list()
         links = [(o, s_) for o, s_ in self.links.items() if s_ is None or s_]
         if not links:
-            self.msg.setText("<b>Click the route sketch</b> (or its lines). Add more sketches "
-                             "for a 3D route. To start on a flange, click its face edge.")
+            self.msg.setText("<b>Click the route's 3D Sketch</b> (or a sketch, or its lines; "
+                             "several sketches make a 3D route too). To start on a flange, "
+                             "click its face edge.")
             if self.route is not None:
                 clear_parts(self.route)
             return
@@ -820,8 +975,12 @@ class RoutePanel:
     def accept(self):
         self._timer.stop()
         if self.route is None or not self.route.Parts:
-            QtWidgets.QMessageBox.information(self.form, "Route Pipe",
-                                              "Pick the route's sketch first - or Cancel.")
+            if self.links and not self.error.isHidden():
+                text = ("This path can't be piped yet - see the red message. Change the "
+                        "sketch (or the size), or Cancel.")
+            else:
+                text = "Pick the route's sketch first - or Cancel."
+            QtWidgets.QMessageBox.information(self.form, "Route Pipe", text)
             self._timer.start()
             return False
         self.doc.commitTransaction()

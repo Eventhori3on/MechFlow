@@ -178,12 +178,29 @@ Each feature has its own panel, and you edit it again by double-clicking.
   screws; change the type per group before OK.
 - **Bill of Materials** with ITEM NO. / PART NUMBER / DESCRIPTION / QTY.,
   counting identical parts and fasteners together.
-- **Route Pipe:** sketch the pipe's centreline (several sketches for a 3D
-  route, branches allowed) and MechFlow fills it in: pipe cut to length,
-  elbows at the bends (EN 10253 2D/3D/5D or ASME LR; cut elbows for other
-  angles), equal tees at branches, a gasket, mating flange and bolts where it
-  starts on a flange, and plain ends, weld neck flanges, blinds or caps at the
-  free ends. Edit the sketch and the route rebuilds.
+- **Routing tab (Tube and Pipe style):**
+  - **3D Sketch:** draw a pipe run straight in 3D space, renamable in the tree
+    like any feature. Click a nozzle flange to start on it (the point snaps to
+    the flange centre), then click along; lines lock to X, Y or Z and round to
+    10 mm, Tab changes the plane, or type a direction and length. Edit any
+    line's length or direction in the table and the lines after it follow.
+    Click a corner to start a branch.
+  - **Route Pipe:** select the 3D Sketch (or ordinary sketches) and MechFlow
+    fills it in: pipe cut to length, elbows at the bends (EN 10253 2D/3D/5D or
+    ASME LR; cut elbows for other angles), equal tees at branches, a gasket,
+    mating flange and bolts where it starts on a flange, and plain ends, weld
+    neck flanges, blinds or caps at the free ends. Edit the sketch and the
+    route rebuilds.
+  - **Valves & Instruments:** click a pipe to drop a ball, gate, globe, check
+    or butterfly valve (EN 558 / ASME B16.10 face-to-face), a pressure gauge
+    or temperature sensor on it. The pipe splits round it and flanges,
+    gaskets and bolts go in. Drag the ring (degree callout, 5° steps) to turn
+    it round the pipe, drag the arrow (mm callout) to slide it along, or type
+    both. They stay put when the route rebuilds.
+  - **Author Component:** open your own valve, strainer or sensor model,
+    click its port edges (two for an inline part, one for a branch part),
+    name it and OK: it joins the Valves & Instruments list and places, turns
+    and bolts up like the built-in ones.
 - **Interference Detection** (touching parts aren't counted, results are
   remembered so re-checking after an edit is quick).
 - **Exploded View:** the biggest part stays put and every other one slides out

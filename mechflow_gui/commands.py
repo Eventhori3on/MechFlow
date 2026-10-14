@@ -705,6 +705,20 @@ def register():
         "(sizes, lengths, suppressed features): add, switch and edit them",
         icon_path("Configurations.svg"), lambda: _run("configurations", "show"),
         lambda: App.ActiveDocument is not None))
+    Gui.addCommand("MechFlow_Sketch3D", _simple(
+        "3D Sketch", "Lines straight in 3D space for a pipe route: click in the view, lines "
+        "run along X, Y or Z (Tab changes plane), start or end on flange and nozzle edges, "
+        "type exact lengths", icon_path("Sketch3D.svg"), lambda: _run("sketch3d", "sketch_3d"),
+        lambda: True))
+    Gui.addCommand("MechFlow_Valves", _simple(
+        "Valves and Instruments", "Put a valve or instrument on a route's pipe: click the pipe; "
+        "it sizes itself, splits the pipe (gaskets, flanges, bolts), and turns round the pipe "
+        "or slides along it with the handles", icon_path("Valve.svg"),
+        lambda: _run("inline", "valves_and_instruments"), lambda: App.ActiveDocument is not None))
+    Gui.addCommand("MechFlow_AuthorComponent", _simple(
+        "Author Component", "Make your own valve, instrument or fitting model a routing "
+        "library part: click its port edges, name it, OK", icon_path("AuthorComponent.svg"),
+        lambda: _run("inline", "author_component"), lambda: App.ActiveDocument is not None))
     Gui.addCommand("MechFlow_RoutePipe", _simple(
         "Route Pipe", "Pipe along sketch lines: pipe cut to length, elbows at the bends, "
         "tees at branches, flanges at the ends - rebuilds when you edit the sketch",

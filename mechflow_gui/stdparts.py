@@ -751,7 +751,7 @@ class _Ref:
 
 def _att(base, sub):
     """(object, sub) to attach to for an edge of base (a flange or _Ref)."""
-    if isinstance(base, _Ref):
+    if hasattr(base, "prefix") and hasattr(base, "obj"):
         return base.obj, base.prefix + sub
     return base, sub
 
@@ -886,8 +886,9 @@ def bolt_set(container, base, mate, gap):
                                  invert=toolbox._outward(o, s_) is False))
     mface = face + n * gap
     for sub in _hole_edges(mate, mface, n, minfo["L"] / 2, back=False):
-        made.append(toolbox.make(container, ntype, (mate, [sub]), nname,
-                                 invert=toolbox._outward(mate, sub) is False))
+        mo, ms = _att(mate, sub)
+        made.append(toolbox.make(container, ntype, (mo, [ms]), nname,
+                                 invert=toolbox._outward(mo, ms) is False))
     return made
 
 
