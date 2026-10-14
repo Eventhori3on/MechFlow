@@ -333,6 +333,12 @@ def add_standard_views(page, objs, projection=FIRST, with_iso=True, scale=None):
 
 
 def _open(page):
+    # opening a sheet makes FreeCAD switch to the TechDraw workbench; stay in
+    # MechFlow (its Drawing tab has the drawing tools)
+    try:
+        wb = Gui.activeWorkbench().name()
+    except Exception:
+        wb = None
     try:
         vo = page.ViewObject
         if hasattr(vo, "show"):
@@ -343,6 +349,15 @@ def _open(page):
             Gui.ActiveDocument.setEdit(page.Name)
         except Exception:
             pass
+    if wb == "MechFlowWorkbench":
+        def back():
+            try:
+                if Gui.activeWorkbench().name() != wb:
+                    Gui.activateWorkbench(wb)
+            except Exception:
+                pass
+        back()
+        QtCore.QTimer.singleShot(0, back)
 
 
 # ------------------------------------------------------------ dialogs

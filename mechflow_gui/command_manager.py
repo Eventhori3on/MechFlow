@@ -130,6 +130,8 @@ TABS = [
         ("Edit\nMaterial", "MechFlow_EditMaterial"),
         ("Section\nView", "MechFlow_SectionView"),
         ("Check\nGeometry", "Part_CheckGeometry"),
+        None,
+        ("Stress\nCheck", "MechFlow_StressCheck"),
     ]),
     ("Drawing", [
         ("Make\nDrawing", "MechFlow_MakeDrawing"),
@@ -159,6 +161,7 @@ TABS = [
                    ("Save as PDF", "MechFlow_SavePDF"),
                    ("Save as DXF", "TechDraw_ExportPageDXF")]),
         ("Save All\nas PDF", "MechFlow_SaveAllPDF"),
+        ("Supplier\nPack", "MechFlow_SupplierPack"),
     ]),
     ("Assembly", [
         ("New\nAssembly", "MechFlow_NewAssembly"),
@@ -175,10 +178,11 @@ TABS = [
                    ("Rack Pinion Mate", "Assembly_CreateJointRackPinion"),
                    ("Screw Mate", "Assembly_CreateJointScrew")]),
         None,
-        ("stack", [("Exploded View", "Assembly_CreateView"),
+        ("stack", [("Exploded View", "MechFlow_ExplodedView"),
                    ("Bill of Materials", "MechFlow_BOM"),
                    ("Interference Detection", "MechFlow_Interference")]),
         ("Make\nDrawing", "MechFlow_MakeDrawing"),
+        ("Supplier\nPack", "MechFlow_SupplierPack"),
     ]),
 ]
 

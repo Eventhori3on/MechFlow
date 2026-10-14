@@ -115,6 +115,14 @@ Each feature has its own panel, and you edit it again by double-clicking.
   numbered, into one folder. On big assemblies bolts, nuts and washers are left
   out of the view by default (FreeCAD's drawing views slow down sharply with
   hundreds of fasteners); they stay in the BOM.
+- **Supplier Pack** (Assembly and Drawing tabs): everything a fabricator
+  needs from one button, in a folder and a zip - the assembly sheet, an
+  **exploded view** sheet with balloons, a dimensioned sheet per part (PDF),
+  STEP of the assembly and each part, **DXF flat profiles** for plasma or
+  laser cutting (every flat plate, each wall of a plate-built part such as a
+  tank, and sheet metal flat patterns; identical profiles - even turned over -
+  are counted together and the file names give thickness and quantity), the
+  BOM and weldment cut list as CSV, and a contents list.
 - The title block fills in from the part: name, material, scale, author, date,
   sheet, and weight on ANSI sheets.
 - The Drawing tab has Model/Projected/Section/Detail views, Smart Dimension,
@@ -177,9 +185,35 @@ Each feature has its own panel, and you edit it again by double-clicking.
   starts on a flange, and plain ends, weld neck flanges, blinds or caps at the
   free ends. Edit the sketch and the route rebuilds.
 - **Interference Detection** (touching parts aren't counted, results are
-  remembered so re-checking after an edit is quick) and Exploded View.
+  remembered so re-checking after an edit is quick).
+- **Exploded View:** the biggest part stays put and every other one slides out
+  along the axis it sits on (a nozzle's gasket, flanges and pipe spread out
+  along the nozzle, a door comes off its side), bolts going with what they
+  hold. Click again to put it back; the assembly and its mates aren't changed.
 
 ![Mate panel](docs/screenshots/mate.png)
+
+### Stress Check
+SimulationXpress-style linear static check of a part or weldment, on
+FreeCAD's FEM (CalculiX, which comes with FreeCAD):
+
+1. **Material** (from the part, or pick one),
+2. **Fixtures:** click the fixed faces,
+3. **Loads:** a force (normal or along X/Y/Z), a pressure, **water pressure**
+   (click one inside face, e.g. a tank's floor: every face the liquid
+   touches is found, and each point gets ρ·g·depth) and the part's own
+   weight,
+4. **Mesh** quality, then **Run**.
+
+You get a colour plot of von Mises stress, the maximum stress and where it
+is, the **factor of safety** against yield (passes at 1.5 or more), and the
+maximum deflection. *Leave out small holes and stubs* (on by default) skips
+bolt holes and small bosses, which cost far more mesh than they change the
+result on a plate or tank. The fixtures and loads are kept with the part, so
+the check can be re-run after a design change. It's a linear check: stresses
+at sharp internal corners and right at fixed edges read high, and when a
+plate deflects more than about half its thickness the real plate is stiffer
+than the result (but it needs stiffening anyway).
 
 ## Where it differs from SOLIDWORKS
 
@@ -233,9 +267,14 @@ apply the preference pack: *Edit → Preferences → General → Preference pack
 
 ## Testing
 
-`tests/` has smoke tests that drive the real FreeCAD GUI on Linux (headless,
-under Xvfb). They build parts, use each panel the way a user would, and check
-the resulting geometry. See [tests/README.md](tests/README.md).
+`tests/` has smoke tests that drive the real FreeCAD GUI. They build parts,
+use each panel the way a user would, and check the resulting geometry. On
+Linux they run headless under Xvfb (`tests/run_tests.sh`); on any OS,
+including Windows, they can run inside FreeCAD from the Python console:
+
+    exec(open(App.getUserAppDataDir() + "Mod/MechFlow/tests/run_in_freecad.py").read())
+
+See [tests/README.md](tests/README.md).
 
 ## Contributing
 

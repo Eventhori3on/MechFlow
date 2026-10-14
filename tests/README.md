@@ -1,7 +1,7 @@
 # MechFlow tests
 
-GUI smoke tests that drive MechFlow inside a real FreeCAD 1.1 window (headless,
-under Xvfb). Each test builds parts, uses a panel the way a user would (picks
+GUI smoke tests that drive MechFlow inside a real FreeCAD 1.1 window (on
+Linux headless under Xvfb, or inside a running FreeCAD on any OS). Each test builds parts, uses a panel the way a user would (picks
 faces, sets values, drags handles, OK / Cancel, re-edits), and logs the result:
 volumes, placements, which buttons appear. The runner fails a test if it
 crashes or hangs, raises a Python error, shows a feature error in a panel, or
@@ -31,6 +31,13 @@ pops up an unexpected dialog.
 | `t_smart` | Smart Fasteners: clearance into tapped, counterbore, through bolt with nut, countersink, blind tapped, skips a blind clearance hole, in a document and in an assembly |
 | `t_toolbox2` | Toolbox on Hole Wizard holes in a part (pick a face: all its holes) |
 | `t_asm` | New Assembly, Insert Components, Mate (Concentric, Coincident, Distance, flip, cancel), Interference Detection |
+| `t_mass` | Mass Properties of parts, weldments and assemblies |
+| `t_nozzle` | Nozzle on a tank wall: flanged stub, follows edits, flange joint on it |
+| `t_pack` | Make Drawing from Assembly: BOM table, balloons, dimensioned part sheets, Save All as PDF |
+| `t_route` | Route Pipe: pipe, elbows, tee and flanges along sketches, rebuild after a sketch edit, save and reopen |
+| `t_config` | Configurations and the design table |
+| `t_stress` | Stress Check: cantilever against hand calculation (deflection and stress), study kept with the part |
+| `t_supplier` | Supplier Pack: PDFs incl. exploded view, STEP, DXF flat of a plate (holes), BOM, zip; Exploded View on and off |
 
 ## Running
 
@@ -40,6 +47,18 @@ pops up an unexpected dialog.
 FREECAD=$PWD/squashfs-root/usr/bin/freecad tests/run_tests.sh          # all
 FREECAD=$PWD/squashfs-root/usr/bin/freecad tests/run_tests.sh t_draw   # one
 ```
+
+On Windows or macOS, run them inside FreeCAD: open *View → Panels → Python
+console* and enter
+
+```python
+exec(open(App.getUserAppDataDir() + "Mod/MechFlow/tests/run_in_freecad.py").read())
+```
+
+(or set `MF_ONLY = ["t_stress", "t_pack"]` first to run some). They run one
+after another in that window and close the documents they make; results go to
+`MechFlow Test Results` in FreeCAD's user folder (`summary.txt`, a log per
+test, screenshots).
 
 Logs, screenshots and FreeCAD output go to `$MF_OUT` (default
 `/tmp/mechflow-tests`). Each `<test>.log` shows the values checked, and the

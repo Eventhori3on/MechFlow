@@ -96,14 +96,30 @@ def place_table(page, name, svg, w, h, right, bottom):
 
 # ------------------------------------------------------------ views
 
+_CACHE = None          # shapes by object while a sheet is being made
+
+
+def shape_once(o):
+    """Part.getShape(o), remembered while a sheet is made (an assembly's
+    hundreds of components are looked at several times)."""
+    import Part
+    key = (o.Document.Name, o.Name)
+    if _CACHE is not None and key in _CACHE:
+        return _CACHE[key]
+    try:
+        s = Part.getShape(o)
+    except Exception:
+        s = getattr(o, "Shape", None)
+    if _CACHE is not None:
+        _CACHE[key] = s
+    return s
+
+
 def _shape_of(objs):
     import Part
     shapes = []
     for o in objs:
-        try:
-            s = Part.getShape(o)
-        except Exception:
-            s = getattr(o, "Shape", None)
+        s = shape_once(o)
         if s is not None and not s.isNull():
             shapes.append(s)
     if not shapes:
@@ -124,6 +140,25 @@ def projected_box(direction, xdir, bb):
                 p = V(px, py, pz)
                 xs.append(p.dot(x))
                 ys.append(p.dot(y))
+    return max(xs) - min(xs), max(ys) - min(ys)
+
+
+def projected_extent(direction, xdir, shape):
+    """Width and height of the shape itself seen along direction (tighter
+    than its bounding box when parts are spread out, as when exploded)."""
+    d = V(direction).normalize()
+    x = V(xdir) - d * V(xdir).dot(d)
+    x.normalize()
+    y = d.cross(x)
+    pts = []
+    for sol in (shape.Solids or [shape]):
+        bb = sol.BoundBox
+        for px in (bb.XMin, bb.XMax):
+            for py in (bb.YMin, bb.YMax):
+                for pz in (bb.ZMin, bb.ZMax):
+                    pts.append(V(px, py, pz))
+    xs = [p.dot(x) for p in pts]
+    ys = [p.dot(y) for p in pts]
     return max(xs) - min(xs), max(ys) - min(ys)
 
 
@@ -456,9 +491,8 @@ def view_sources(asm, fasteners=None):
         if type(getattr(o, "Proxy", None)).__name__ in ("Joint", "GroundedJoint"):
             continue
         try:
-            import Part
-            sh = Part.getShape(o)
-            if sh.isNull() or not sh.Solids:
+            sh = shape_once(o)
+            if sh is None or sh.isNull() or not sh.Solids:
                 continue
         except Exception:
             continue
@@ -468,12 +502,22 @@ def view_sources(asm, fasteners=None):
     return comps + (fast if fasteners else []), len(fast), fasteners
 
 
-def assembly_sheet(asm, sheet, sheet_no=1, sheets=1, fasteners=None):
-    """Isometric of the assembly, BOM table and balloons. Returns the page."""
+def assembly_sheet(asm, sheet, sheet_no=1, sheets=1, fasteners=None, exploded=False):
+    """Isometric of the assembly, BOM table and balloons. Returns the page.
+    exploded=True draws the exploded view (see exploded.py) instead."""
+    global _CACHE
+    _CACHE = {}
+    try:
+        return _assembly_sheet(asm, sheet, sheet_no, sheets, fasteners, exploded)
+    finally:
+        _CACHE = None
+
+
+def _assembly_sheet(asm, sheet, sheet_no, sheets, fasteners, exploded):
     from mechflow_gui import bom, drawings
     doc = asm.Document
     page = drawings.new_page(doc, sheet)
-    page.Label = f"{asm.Label} - Assembly"
+    page.Label = f"{asm.Label} - {'Exploded View' if exploded else 'Assembly'}"
     t = page.Template
     W, H, left, margin, tb_w, tb_h = _layout(t)
     data, objs = bom.rows_with_objects(asm)
@@ -486,22 +530,33 @@ def assembly_sheet(asm, sheet, sheet_no=1, sheets=1, fasteners=None):
     place_table(page, "BOM table", svg, tw, th, W - margin, bottom)
     # the view, in the space left of the table
     sources, n_fast, shown = view_sources(asm, fasteners)
+    move = {}
+    if exploded:
+        from mechflow_gui import exploded as ex
+        links, move = ex.exploded_links(asm, sources)
+        sources = links
     shape = _shape_of(sources)
     if shape is None:
         doc.removeObject(page.Name)
         raise ValueError("the assembly has no parts to draw")
-    bb = shape.BoundBox
-    pw, ph = projected_box(ISO_DIR, ISO_X, bb)
+    pw, ph = projected_extent(ISO_DIR, ISO_X, shape)
     area_w = W - left - margin - tw - 40
     area_h = H - 2 * margin - 30
-    scale = _fit_scale(pw, ph, area_w * 0.8, area_h * 0.8)
+    # room for the balloons round it: about 20 mm each side
+    scale = _fit_scale(pw, ph, area_w - 45, area_h - 45)
     v = doc.addObject("TechDraw::DrawViewPart", "AssemblyView")
     page.addView(v)
-    v.Label = "Isometric"
+    v.Label = "Exploded isometric" if exploded else "Isometric"
     v.Source = sources
     v.Direction, v.XDirection = ISO_DIR, ISO_X
     if n_fast and not shown:
-        v.Caption = "Bolts, nuts and washers not shown"
+        # a note in the corner (a caption under the view runs into balloons)
+        note = doc.addObject("TechDraw::DrawViewAnnotation", "Note")
+        note.Text = ["Bolts, nuts and washers not shown (see BOM)"]
+        note.TextSize = 3.5
+        page.addView(note)
+        note.X = left + 55
+        note.Y = margin + 8
     v.ScaleType = "Custom"
     v.Scale = scale
     v.X = left + area_w / 2 + 10
@@ -514,6 +569,9 @@ def assembly_sheet(asm, sheet, sheet_no=1, sheets=1, fasteners=None):
     wait(page)
     # balloons, numbered as the BOM
     items = []
+    if exploded:
+        from mechflow_gui import exploded as ex
+        move = ex.follow(asm, move)       # hidden bolts go with what they hold
     for i, (name, _d, _q) in enumerate(data, start=1):
         best = None
         for o in objs.get(name, []):
@@ -523,6 +581,9 @@ def assembly_sheet(asm, sheet, sheet_no=1, sheets=1, fasteners=None):
                 sh = None
             if sh is None:
                 continue
+            if exploded:
+                sh = sh.copy()
+                sh.translate(move.get(o, V()))
             p = _front_point(sh, ISO_DIR)
             k = p.dot(V(ISO_DIR).normalize())
             if best is None or k > best[0]:

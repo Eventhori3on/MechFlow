@@ -18,7 +18,7 @@ CUR = {"p": None}
 
 
 def log(*a):
-    open(LOG, "a").write(" ".join(map(str, a)) + "\n")
+    open(LOG, "a", encoding="utf-8").write(" ".join(map(str, a)) + "\n")
 
 
 def at(f, w=400):

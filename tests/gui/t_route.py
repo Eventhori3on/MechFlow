@@ -131,10 +131,11 @@ def edit_sketch():
     g[3] = Part.LineSegment(a, b + V(0, -150, 0))
     sk1.Geometry = g
     S["doc"].recompute()
-at(edit_sketch, 800)
+at(edit_sketch, 30000)       # the rebuild runs by itself; a slow machine needs the time
 
 
 def after_edit():
+    import time
     r = S["r"]
     from mechflow_gui import routing
     log("rebuild busy", routing._obs.busy)
@@ -146,7 +147,7 @@ def after_edit():
     assert pipes != S["before"] and len(pipes) == 5, "route didn't rebuild"
     from mechflow_gui import bom
     S["doc"].recompute()
-at(after_edit, 12000)
+at(after_edit, 2000)
 
 
 def reopen():

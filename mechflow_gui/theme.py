@@ -72,6 +72,19 @@ QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus { border-
 QComboBox QAbstractItemView { background: #ffffff; selection-background-color: #cce4f7;
                               selection-color: #000000; }
 QCheckBox, QRadioButton, QLabel { background: transparent; }
+QCheckBox::indicator, QTreeView::indicator, QListView::indicator, QTableView::indicator {
+    width: 13px; height: 13px; border: 1px solid #7a7a7a; border-radius: 2px; background: #ffffff; }
+QCheckBox::indicator:hover, QRadioButton::indicator:hover { border-color: #0078d7; }
+QCheckBox::indicator:checked, QTreeView::indicator:checked, QListView::indicator:checked,
+QTableView::indicator:checked {
+    background: #0078d7; border-color: #0078d7; image: url("@TICK@"); }
+QCheckBox::indicator:disabled { background: #f0f0f0; border-color: #c0c0c0; }
+QCheckBox::indicator:checked:disabled { background: #a0a0a0; border-color: #a0a0a0; }
+QRadioButton::indicator { width: 13px; height: 13px; border: 1px solid #7a7a7a; border-radius: 7px;
+                          background: #ffffff; }
+QRadioButton::indicator:checked { border-color: #0078d7; background: qradialgradient(
+    cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5, stop:0 #0078d7, stop:0.5 #0078d7,
+    stop:0.56 #ffffff, stop:1 #ffffff); }
 QScrollBar:vertical { background: #f0f0f0; width: 12px; margin: 0; }
 QScrollBar:horizontal { background: #f0f0f0; height: 12px; margin: 0; }
 QScrollBar::handle { background: #c2c2c2; border-radius: 4px; min-height: 24px; min-width: 24px; margin: 2px; }
@@ -89,6 +102,7 @@ BACKGROUND = {
     "BackgroundColor2": 0xFFFFFFFF,     # top: white
     "BackgroundColor3": 0xB9CAD9FF,     # bottom: pale blue-grey
     "UseBackgroundColorMid": False,
+    "CbLabelColor": 0x000000FF,         # colour bar numbers: black, readable on the light background
 }
 
 _applied = False
@@ -98,6 +112,16 @@ _saved_palette = None
 
 def enabled():
     return App.ParamGet(PARAMS).GetBool("LightTheme", True)
+
+
+def _qss():
+    """The style sheet, with the tick image's path filled in. (Without our
+    own check box styling, Windows 11 draws unticked boxes invisibly once a
+    style sheet is set.)"""
+    import os
+    tick = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        "Resources", "icons", "check_tick.svg").replace("\\", "/")
+    return QSS.replace("@TICK@", tick)
 
 
 def _palette():
@@ -158,7 +182,7 @@ def apply():
     _saved_qss = app.styleSheet()
     _saved_palette = QtGui.QPalette(app.palette())
     app.setPalette(_palette())
-    app.setStyleSheet(QSS)
+    app.setStyleSheet(_qss())
     try:
         _set_background(True)
     except Exception as e:

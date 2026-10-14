@@ -685,6 +685,21 @@ def register():
         "Toolbox", "Standard parts (ISO, DIN, ASME screws, nuts, washers, pins): pick one "
         "and click holes - it sizes itself to each hole", icon_path("Toolbox.svg"),
         lambda: _run("toolbox", "toolbox"), lambda: True))
+    Gui.addCommand("MechFlow_ExplodedView", _simple(
+        "Exploded View", "Show the assembly exploded (each part slid out along the axis it "
+        "sits on); again to put it back. The assembly and its mates aren't changed",
+        icon_path("ExplodedView.svg"), lambda: _run("exploded", "toggle"),
+        lambda: App.ActiveDocument is not None))
+    Gui.addCommand("MechFlow_SupplierPack", _simple(
+        "Supplier Pack", "Everything a fabricator needs in one folder and a zip: drawings with "
+        "an exploded view (PDF), STEP of each part, DXF flat profiles of the plates, the BOM",
+        icon_path("SupplierPack.svg"), lambda: _run("supplier_pack", "supplier_pack"),
+        lambda: App.ActiveDocument is not None))
+    Gui.addCommand("MechFlow_StressCheck", _simple(
+        "Stress Check", "SimulationXpress-style check: fix faces, add a force, pressure, water "
+        "pressure or the part's weight, and see the stress, deflection and factor of safety",
+        icon_path("StressCheck.svg"), lambda: _run("simulation", "stress_check"),
+        lambda: App.ActiveDocument is not None))
     Gui.addCommand("MechFlow_Configurations", _simple(
         "Configurations", "Versions of the part in one file, driven from a Design Table "
         "(sizes, lengths, suppressed features): add, switch and edit them",

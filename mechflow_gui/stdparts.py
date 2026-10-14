@@ -621,7 +621,11 @@ class ViewProviderStdPart:
 
 
 def is_std_object(o):
-    return type(getattr(o, "Proxy", None)).__name__ == "StdPart"
+    if type(getattr(o, "Proxy", None)).__name__ == "StdPart":
+        return True
+    # one whose Python side didn't load still has its standard part data
+    return getattr(o, "TypeId", "") == "Part::FeaturePython" and \
+        all(hasattr(o, k) for k in ("StdType", "Size", "Rating"))
 
 
 def object_designation(o):
