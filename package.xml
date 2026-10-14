@@ -6,9 +6,9 @@
   <date>2026-10-14</date>
   <maintainer email="watermanengineeringlimited@proton.me">Waterman Engineering</maintainer>
   <license file="LICENSE">LGPL-2.1-or-later</license>
-  <url type="repository" branch="main">https://github.com/YOUR-GITHUB-USERNAME/MechFlow</url>
-  <url type="bugtracker">https://github.com/YOUR-GITHUB-USERNAME/MechFlow/issues</url>
-  <url type="readme">https://github.com/YOUR-GITHUB-USERNAME/MechFlow/blob/main/README.md</url>
+  <url type="repository" branch="main">https://github.com/Eventhori3on/MechFlow</url>
+  <url type="bugtracker">https://github.com/Eventhori3on/MechFlow/issues</url>
+  <url type="readme">https://github.com/Eventhori3on/MechFlow/blob/main/README.md</url>
   <icon>Resources/icons/MechFlow.svg</icon>
   <tag>solidworks</tag>
   <tag>workflow</tag>

@@ -191,6 +191,8 @@ Each feature has its own panel, and you edit it again by double-clicking.
   along the nozzle, a door comes off its side), bolts going with what they
   hold. Click again to put it back; the assembly and its mates aren't changed.
 
+  ![Exploded View of a tank assembly](docs/screenshots/exploded.png)
+
 ![Mate panel](docs/screenshots/mate.png)
 
 ### Stress Check
@@ -214,6 +216,8 @@ the check can be re-run after a design change. It's a linear check: stresses
 at sharp internal corners and right at fixed edges read high, and when a
 plate deflects more than about half its thickness the real plate is stiffer
 than the result (but it needs stiffening anyway).
+
+![Stress Check of a water tank](docs/screenshots/stress-check.png)
 
 ## Where it differs from SOLIDWORKS
 
