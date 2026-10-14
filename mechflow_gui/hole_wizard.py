@@ -350,7 +350,8 @@ class HolePanel:
                 _set_enum(h, "DepthType", ["ThroughAll"])
             elif self.end.currentText() == "Up To Next":
                 _set_enum(h, "DepthType", ["Dimension"])
-                depth = self._up_to_next()
+                self.doc.recompute()
+                depth = up_to_next_depth(h) or self._up_to_next()
                 if depth is None:
                     raise ValueError("no wall to drill through")
                 _set_enum(h, "DrillPoint", ["Flat"])
@@ -492,3 +493,80 @@ def edit(hole):
         return
     hole.Document.openTransaction("Edit " + hole.Label)
     Gui.Control.showDialog(HolePanel(body, sketch=sketch, hole=hole))
+
+
+# ------------------------------------------------------------ Up To Next follows the model
+
+class _UpToNextObserver:
+    """Up To Next holes keep going through exactly the first wall: when the
+    part changes (a thicker wall, a moved face) their depth is worked out
+    again after the rebuild."""
+
+    def __init__(self):
+        self.busy = False
+
+    def slotRecomputedDocument(self, doc):
+        if self.busy:
+            return
+        if any(getattr(o, "MechFlowUpToNext", False) for o in doc.Objects
+               if o.TypeId == "PartDesign::Hole"):
+            try:
+                from PySide6 import QtCore as _QC
+            except ImportError:
+                from PySide2 import QtCore as _QC
+            _QC.QTimer.singleShot(0, lambda d=doc: self._update(d))
+
+    def _update(self, doc):
+        if self.busy:
+            return
+        try:
+            if Gui.Control.activeDialog():
+                return
+        except Exception:
+            pass
+        self.busy = True
+        changed = False
+        try:
+            for h in [o for o in doc.Objects if o.TypeId == "PartDesign::Hole"
+                      and getattr(o, "MechFlowUpToNext", False)]:
+                d = up_to_next_depth(h)
+                if d is not None and abs(float(h.Depth) - d) > 1e-3:
+                    h.Depth = d
+                    changed = True
+            if changed:
+                doc.recompute()
+        except Exception as e:
+            App.Console.PrintWarning(f"MechFlow: Up To Next hole not updated ({e})\n")
+        finally:
+            self.busy = False
+
+
+def up_to_next_depth(h):
+    """Depth through the first wall for an existing Up To Next hole."""
+    base = h.BaseFeature
+    prof = h.Profile[0] if isinstance(h.Profile, tuple) else h.Profile
+    if base is None or prof is None:
+        return None
+    gp = prof.getGlobalPlacement()
+    body = h.getParentGeoFeatureGroup()
+    # the base shape is in the body's axes: put the hole centres there too
+    if body is not None:
+        gp = body.getGlobalPlacement().inverse().multiply(gp)
+    pts = [gp.multVec(g.Center) for g in _circles(prof)]
+    if not pts:
+        return None
+    n = gp.Rotation.multVec(App.Vector(0, 0, 1))
+    shape = base.Shape
+    probe = pts[0] - n * 0.05
+    direction = -n if shape.isInside(probe, 1e-6, True) else n
+    return first_wall_depth(shape, pts, direction, float(h.Diameter) / 2)
+
+
+_utn = None
+
+
+def install():
+    global _utn
+    if _utn is None:
+        _utn = _UpToNextObserver()
+        App.addDocumentObserver(_utn)

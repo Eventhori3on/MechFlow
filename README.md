@@ -47,7 +47,13 @@ Each feature has its own panel, and you edit it again by double-clicking.
 - **Reference Plane** (offset, at angle, mid plane, through a point, 3 points,
   normal to curve, tangent) with drag handles, and **Axis**.
 - **Rollback**, **Suppress/Unsuppress**, **Section View** (up to three
-  sections, drag handle), **Edit Material** and **Mass Properties**.
+  sections, drag handle - on parts and whole assemblies), **Edit Material**
+  and **Mass Properties** (a body, a weldment part or a whole assembly).
+- **Configurations** with a **Design Table**: one part file, several versions
+  of it. Columns are named sketch dimensions, feature values (depths, wall
+  thickness, hole depths, member sizes) or a feature's suppression; rows are
+  configurations. Double-click one to rebuild the part to it; "Save model
+  values" writes your edits back into the table.
 
 ![Extrude with the depth drag arrow](docs/screenshots/extrude-drag.png)
 
@@ -98,8 +104,17 @@ Each feature has its own panel, and you edit it again by double-clicking.
 
 ### Drawings
 - **Make Drawing from Part:** pick a sheet (ISO A4–A0, ANSI A–D) and get a
-  standard 3 view plus an isometric, at a standard scale that fits the sheet.
+  standard 3 view plus an isometric, at a standard scale that fits the sheet
+  clear of the title block, with overall dimensions, an "n x ⌀" callout and a
+  position for each size of hole, and the weldment cut list as a table.
   Projection is first-angle for ISO sheets and third-angle for ANSI.
+- **Make Drawing from Assembly** (same button, with an assembly open): an
+  isometric with the **BOM table** and a numbered **balloon** on every BOM
+  item, plus a dimensioned sheet for each part ("Auto" picks a bigger sheet
+  only when it allows a bigger scale). **Save All as PDF** writes every sheet,
+  numbered, into one folder. On big assemblies bolts, nuts and washers are left
+  out of the view by default (FreeCAD's drawing views slow down sharply with
+  hundreds of fasteners); they stay in the BOM.
 - The title block fills in from the part: name, material, scale, author, date,
   sheet, and weight on ANSI sheets.
 - The Drawing tab has Model/Projected/Section/Detail views, Smart Dimension,
@@ -155,7 +170,14 @@ Each feature has its own panel, and you edit it again by double-clicking.
   screws; change the type per group before OK.
 - **Bill of Materials** with ITEM NO. / PART NUMBER / DESCRIPTION / QTY.,
   counting identical parts and fasteners together.
-- **Interference Detection** and Exploded View.
+- **Route Pipe:** sketch the pipe's centreline (several sketches for a 3D
+  route, branches allowed) and MechFlow fills it in: pipe cut to length,
+  elbows at the bends (EN 10253 2D/3D/5D or ASME LR; cut elbows for other
+  angles), equal tees at branches, a gasket, mating flange and bolts where it
+  starts on a flange, and plain ends, weld neck flanges, blinds or caps at the
+  free ends. Edit the sketch and the route rebuilds.
+- **Interference Detection** (touching parts aren't counted, results are
+  remembered so re-checking after an edit is quick) and Exploded View.
 
 ![Mate panel](docs/screenshots/mate.png)
 
@@ -165,8 +187,10 @@ MechFlow changes how FreeCAD looks and behaves, but the geometry is still
 FreeCAD's, so a few things work differently:
 
 - Drawings are stored in the part's `.FCStd` file, not a separate drawing file.
-  There is no *Model Items* import of sketch dimensions; you dimension the
-  drawing with Smart Dimension.
+  There is no *Model Items* import of sketch dimensions: MechFlow adds overall
+  and hole dimensions, and you add the rest with Smart Dimension.
+- An assembly shows each part in its active configuration; two configurations
+  of the same part can't be in one assembly yet.
 - FreeCAD needs an assembly to be saved before it can link parts from other
   files. It prompts you when this happens.
 - Editing an existing mate, and the gear, rack-and-pinion and screw mates, use

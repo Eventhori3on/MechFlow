@@ -129,6 +129,12 @@ class NozzleFeature:
         obj.Shape = shape
         if (V(obj.PipeEnd) - end).Length > 1e-9:
             obj.PipeEnd = end
+        # keep the name in step with the size and standout ('Nozzle DN80 x 150<1>')
+        import re
+        base = f"Nozzle {obj.Size} x {float(obj.Standout):g}"
+        m = re.search(r"<(\d+)>$", obj.Label)
+        if m and not obj.Label.startswith(base + "<"):
+            obj.Label = f"{base}<{m.group(1)}>"
 
     def dumps(self):
         return None
@@ -238,7 +244,26 @@ def add_flange(feature, ftype, rating=None, container=None):
             part = None
         if part is not None and part.TypeId == "App::Part":
             container = part
-    return stdparts.place(container, ftype, body, sub, size, rating, joint=False)
+    made = stdparts.place(container, ftype, body, sub, size, rating, joint=False)
+    for f in made:
+        follow_nozzle(f, feature)
+    return made
+
+
+def follow_nozzle(flange, feature):
+    """Tie a flange to the nozzle itself (not an edge number), so it stays on
+    the pipe end when the nozzle's size, position or standout change."""
+    from mechflow_gui import stdparts
+    if not stdparts.is_std_object(flange):
+        return
+    pl = flange.Placement
+    if not hasattr(flange, "NozzleRef"):
+        flange.addProperty("App::PropertyLinkGlobal", "NozzleRef", "Placement",
+                           "Nozzle the part sits on (it follows the nozzle)")
+    # placed on the end circle facing out of the pipe: same axis as the nozzle
+    flange.BaseObject = None
+    flange.NozzleRef = feature
+    flange.Document.recompute()
 
 
 # ------------------------------------------------------------ panel

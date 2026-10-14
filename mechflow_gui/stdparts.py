@@ -300,7 +300,16 @@ def _clean(shape):
         return shape
 
 
-def shape_for(t, size, rating, length=1000.0):
+def is_elbow(t):
+    return t.endswith("90LR") or t.endswith("45LR") or t.startswith("EN10253-90") or \
+        t.startswith("EN10253-45")
+
+
+def elbow_angle(t):
+    return 45.0 if ("45" in t.split("-")[-1] or t.startswith("EN10253-45")) else 90.0
+
+
+def shape_for(t, size, rating, length=1000.0, angle=0.0):
     """The part in its own axes: the connection at z = 0, the part running
     up +Z (bearings: one side face at z = 0)."""
     import Part
@@ -364,12 +373,14 @@ def shape_for(t, size, rating, length=1000.0):
         if kind == "RED":
             od2, wall2 = asme_pipe(_nps(size, small=True), rating)
         kind = {"90LR": "ELB", "45LR": "ELB"}.get(kind, kind)
-        ang = 45 if t.endswith("45LR") else 90
+        ang = angle or (45 if t.endswith("45LR") else 90)
         return _fitting(kind, od, wall, A, ang, C, H, E, od2, wall2)
     if t.startswith("EN10253"):
         od, wall, R, C, H, E, od2, wall2 = en_fitting_dims(t, size)
         kind = t.split("-")[1]
         ang = {"90": 90, "45": 45}.get(kind)
+        if ang and angle:
+            ang = angle
         return _fitting("ELB" if ang else kind, od, wall, R, ang or 90, C, H, E, od2, wall2)
     if t.startswith("ISO15-"):
         d, D, B, r = T.BEARINGS[t[-2:]][size]
@@ -519,9 +530,42 @@ class StdPart:
     def execute(self, obj):
         t = obj.StdType
         rating = obj.Rating if obj.Rating != "-" else ""
-        shape = shape_for(t, obj.Size, rating, float(obj.Length))
+        shape = shape_for(t, obj.Size, rating, float(obj.Length),
+                          float(getattr(obj, "BendAngle", 0) or 0))
         pl = App.Placement()
         base = obj.BaseObject
+        noz = getattr(obj, "NozzleRef", None)
+        if noz is not None:
+            # on a MechFlow nozzle: follow its pipe end, whatever the edge
+            # numbers become when the nozzle is edited
+            try:
+                if noz.Size != obj.Size and noz.Size in sizes(t):
+                    obj.Size = noz.Size            # the nozzle changed size: so does the flange
+                body = noz.getParentGeoFeatureGroup()
+                gp = body.getGlobalPlacement() if body is not None else App.Placement()
+                c = gp.multVec(V(noz.PipeEnd))
+                ax = gp.Rotation.multVec(V(noz.Direction)).normalize()
+                parent = obj.getParentGeoFeatureGroup()
+                if parent is not None:
+                    inv = parent.getGlobalPlacement().inverse()
+                    c, ax = inv.multVec(c), inv.Rotation.multVec(ax)
+                if obj.Invert:
+                    ax = ax * -1
+                rot = App.Rotation(V(0, 0, 1), ax)
+                spin = App.Rotation(V(0, 0, 1), float(obj.Spin))
+                pl = App.Placement(c + ax * float(obj.Offset), rot.multiply(spin))
+            except Exception as e:
+                App.Console.PrintWarning(f"MechFlow: {obj.Label}: can't follow its nozzle ({e})\n")
+                pl = obj.Placement
+            obj.Shape = shape_for(t, obj.Size, rating, float(obj.Length),
+                                  float(getattr(obj, "BendAngle", 0) or 0))
+            obj.Placement = pl
+            n = getattr(obj, "MechFlowInstance", 0)
+            name = object_designation(obj)
+            want = f"{name}<{n}>" if n else name
+            if obj.Label != want:
+                obj.Label = want
+            return
         if base and base[1]:
             try:
                 c, ax = _edge_frame(base[0], base[1][0], t.startswith("ISO15-"))
@@ -538,7 +582,7 @@ class StdPart:
         obj.Shape = shape
         obj.Placement = pl
         n = getattr(obj, "MechFlowInstance", 0)
-        name = designation(t, obj.Size, rating, float(obj.Length))
+        name = object_designation(obj)
         want = f"{name}<{n}>" if n else name
         if obj.Label != want:
             obj.Label = want
@@ -582,7 +626,19 @@ def is_std_object(o):
 
 def object_designation(o):
     rating = o.Rating if o.Rating != "-" else ""
-    return designation(o.StdType, o.Size, rating, float(o.Length))
+    name = designation(o.StdType, o.Size, rating, float(o.Length))
+    a = float(getattr(o, "BendAngle", 0) or 0)
+    if a and is_elbow(o.StdType) and abs(a - elbow_angle(o.StdType)) > 1e-6:
+        name += f" cut to {a:g}\u00b0"
+    return name
+
+
+def set_bend_angle(o, angle):
+    """Cut an elbow to angle (degrees); 0 = its standard angle."""
+    if not hasattr(o, "BendAngle"):
+        o.addProperty("App::PropertyAngle", "BendAngle", "Standard part",
+                      "Elbow cut to this angle (0: the standard 90 / 45)")
+    o.BendAngle = angle
 
 
 def make(container, t, size, rating, length=1000.0, attach=None):

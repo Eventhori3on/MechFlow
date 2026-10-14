@@ -53,6 +53,18 @@ def check_side():
     bb = fl[0].Shape.BoundBox
     assert abs(bb.XMax + 500) < 1e-3, f"flange not on the pipe end {bb}"
     S["flange"] = fl[0]
+    # edit the nozzle: the flange follows (standout, then size)
+    f.Standout = 260
+    S["doc"].recompute()
+    bb = fl[0].Shape.BoundBox
+    log("after standout 260: flange x max", round(bb.XMax, 2), "nozzle ref", getattr(fl[0], "NozzleRef", None) and fl[0].NozzleRef.Label)
+    assert abs(bb.XMax + 560) < 1e-3, bb
+    f.Size = "DN100"
+    S["doc"].recompute()
+    log("after DN100:", fl[0].Label)
+    assert fl[0].Size == "DN100" and abs(fl[0].Shape.BoundBox.XMax + 560) < 1e-3
+    f.Size = "DN80"; f.Standout = 200
+    S["doc"].recompute()
 at(check_side, 1200)
 
 
@@ -156,7 +168,20 @@ def holes_ok():
     p.accept()
     S["box"].recompute()
     assert S["bb"].Tip.MechFlowUpToNext
+    S["hole"] = S["bb"].Tip
+    from mechflow_gui import hole_wizard
+    hole_wizard.install()
+    S["box"].getObject("LidPad").Length = 12        # a thicker lid
+    S["box"].recompute()
 at(holes_ok, 1500)
+
+
+def lid_thicker():
+    h = S["hole"]
+    log("lid 12 mm: Up To Next depth", float(h.Depth))
+    assert abs(float(h.Depth) - 12.5) < 0.01, float(h.Depth)
+    assert not S["bb"].Shape.isInside(V(0, 0, 404), 1e-6, True) and not S["bb"].Shape.isInside(V(0, 0, 398), 1e-6, True)
+at(lid_thicker, 1500)
 
 
 def weldment():

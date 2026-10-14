@@ -50,6 +50,7 @@ TABS = [
         ("stack", [("Plane", "MechFlow_Plane"),
                    ("Axis", "MechFlow_Axis"),
                    ("Point", "PartDesign_Point")]),
+        ("Configu-\nrations", "MechFlow_Configurations"),
     ]),
     ("Sketch", [
         ("Sketch", "MechFlow_SketchToggle"),
@@ -131,7 +132,7 @@ TABS = [
         ("Check\nGeometry", "Part_CheckGeometry"),
     ]),
     ("Drawing", [
-        ("Make Drawing\nfrom Part", "MechFlow_MakeDrawing"),
+        ("Make\nDrawing", "MechFlow_MakeDrawing"),
         ("Standard\n3 View", "MechFlow_Standard3View"),
         ("stack", [("Model View", "TechDraw_View"),
                    ("Projected View", "TechDraw_ProjectionGroup"),
@@ -157,13 +158,15 @@ TABS = [
         ("stack", [("Sheet Format", "MechFlow_SheetFormat"),
                    ("Save as PDF", "MechFlow_SavePDF"),
                    ("Save as DXF", "TechDraw_ExportPageDXF")]),
+        ("Save All\nas PDF", "MechFlow_SaveAllPDF"),
     ]),
     ("Assembly", [
         ("New\nAssembly", "MechFlow_NewAssembly"),
         ("Insert\nComponents", "MechFlow_InsertComponents"),
         ("Mate", "MechFlow_Mate"),
         ("stack", [("Toolbox", "MechFlow_Toolbox"),
-                   ("Smart Fasteners", "MechFlow_SmartFasteners")]),
+                   ("Smart Fasteners", "MechFlow_SmartFasteners"),
+                   ("Route Pipe", "MechFlow_RoutePipe")]),
         None,
         ("stack", [("New Part", "Assembly_InsertNewPart"),
                    ("Fix / Float", "Assembly_ToggleGrounded"),
@@ -175,6 +178,7 @@ TABS = [
         ("stack", [("Exploded View", "Assembly_CreateView"),
                    ("Bill of Materials", "MechFlow_BOM"),
                    ("Interference Detection", "MechFlow_Interference")]),
+        ("Make\nDrawing", "MechFlow_MakeDrawing"),
     ]),
 ]
 

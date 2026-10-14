@@ -641,19 +641,23 @@ def register():
         "PartDesign_MoveTip", _roll_to_end, is_rolled_back))
     Gui.addCommand("MechFlow_Chamfer", ChamferCmd())
     for name, menu, tip, pix, fn in (
-        ("MakeDrawing", "Make Drawing from Part",
-         "Make a drawing of the part: sheet, standard 3 view, isometric and title block",
-         "TechDraw_PageDefault", "make_drawing"),
+        ("MakeDrawing", "Make Drawing from Part/Assembly",
+         "A drawing of the part (standard 3 view, isometric, dimensions, title block) - "
+         "or of the assembly (BOM table, balloons and a dimensioned sheet per part)",
+         "MakeDrawing.svg", "make_drawing"),
         ("Standard3View", "Standard 3 View",
          "Front, Top and Right views of the selected part on the open drawing",
-         "TechDraw_ProjectionGroup", "standard_3_view"),
+         "Standard3View.svg", "standard_3_view"),
         ("SheetFormat", "Sheet Format/Size", "Change the drawing's sheet size and format",
-         "TechDraw_PageTemplate", "sheet_format"),
+         "SheetFormat.svg", "sheet_format"),
         ("SavePDF", "Save as PDF", "Save the open drawing as a PDF",
-         "TechDraw_PrintAll", "save_pdf"),
+         "SavePDF.svg", "save_pdf"),
     ):
         Gui.addCommand("MechFlow_" + name, _simple(
-            menu, tip, pix, (lambda f=fn: _run("drawings", f))))
+            menu, tip, icon_path(pix), (lambda f=fn: _run("drawings", f))))
+    Gui.addCommand("MechFlow_SaveAllPDF", _simple(
+        "Save All Drawings as PDF", "Every open drawing sheet as a PDF, numbered, in one folder",
+        icon_path("SaveAllPDF.svg"), lambda: _run("drawing_pack", "save_all_drawings")))
     for name, menu, tip, pix, fn in (
         ("NewAssembly", "New Assembly", "Start a new assembly document",
          "Geoassembly", "new_assembly"),
@@ -681,6 +685,16 @@ def register():
         "Toolbox", "Standard parts (ISO, DIN, ASME screws, nuts, washers, pins): pick one "
         "and click holes - it sizes itself to each hole", icon_path("Toolbox.svg"),
         lambda: _run("toolbox", "toolbox"), lambda: True))
+    Gui.addCommand("MechFlow_Configurations", _simple(
+        "Configurations", "Versions of the part in one file, driven from a Design Table "
+        "(sizes, lengths, suppressed features): add, switch and edit them",
+        icon_path("Configurations.svg"), lambda: _run("configurations", "show"),
+        lambda: App.ActiveDocument is not None))
+    Gui.addCommand("MechFlow_RoutePipe", _simple(
+        "Route Pipe", "Pipe along sketch lines: pipe cut to length, elbows at the bends, "
+        "tees at branches, flanges at the ends - rebuilds when you edit the sketch",
+        icon_path("Route.svg"), lambda: _run("routing", "route_pipe"),
+        lambda: App.ActiveDocument is not None))
     Gui.addCommand("MechFlow_Nozzle", _simple(
         "Nozzle", "Pipe stub on a tank or vessel wall (flat or curved): bores the wall "
         "it sits on and can add a flange on the end", icon_path("Nozzle.svg"),

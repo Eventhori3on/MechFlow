@@ -45,6 +45,10 @@ class MechFlowWorkbench(Gui.Workbench):
         from mechflow_gui import section
         step("section tidy-up", section.tidy_left_overs)
         step("section save guard", section.install)
+        from mechflow_gui import routing
+        step("pipe route rebuild", routing.install)
+        from mechflow_gui import hole_wizard
+        step("Up To Next holes follow the part", hole_wizard.install)
         step("selection highlight check", feature_highlight.restore_after_crash)
         step("quiet tree selection", feature_highlight.install)
         from mechflow_gui import sketch_status

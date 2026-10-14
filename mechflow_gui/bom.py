@@ -22,7 +22,8 @@ except ImportError:
 
 HEADERS = ["ITEM NO.", "PART NUMBER", "DESCRIPTION", "QTY."]
 SKIP_TYPES = ("Assembly::JointGroup", "Assembly::ViewGroup", "Assembly::BomGroup",
-              "Assembly::BomObject", "Spreadsheet::Sheet", "App::DocumentObjectGroup")
+              "Assembly::BomObject", "Spreadsheet::Sheet", "App::DocumentObjectGroup",
+              "Sketcher::SketchObject", "App::Origin")
 
 
 def _strip_instance(label):
@@ -79,12 +80,20 @@ def _part_row(o):
 
 def rows(asm):
     """[(part number, description, qty)] in tree order."""
-    order, count, descs = [], {}, {}
+    return rows_with_objects(asm)[0]
+
+
+def rows_with_objects(asm):
+    """(rows, {part number: [objects]}) - the objects let a drawing put a
+    balloon on each item."""
+    order, count, descs, objs = [], {}, {}, {}
     for o in asm.Group:
-        if o.TypeId in SKIP_TYPES or any(o.isDerivedFrom(t) for t in SKIP_TYPES[:4]):
-            continue
-        if type(getattr(o, "Proxy", None)).__name__ in ("Joint", "GroundedJoint", "ViewProviderJoint"):
-            continue                      # mates are not parts
+        if o.TypeId in SKIP_TYPES or any(o.isDerivedFrom(t) for t in SKIP_TYPES[:4]) \
+                or o.isDerivedFrom("Part::Part2DObject"):
+            continue                      # layout sketches (e.g. pipe routes) aren't parts
+        if type(getattr(o, "Proxy", None)).__name__ in ("Joint", "GroundedJoint", "ViewProviderJoint",
+                                                         "PipeRoute"):
+            continue                      # mates and routes are not parts (route parts are)
         if getattr(o, "Visibility", True) is False and not _is_fastener(o) \
                 and not _is_std(o) and o.TypeId != "App::Link":
             continue
@@ -100,8 +109,10 @@ def rows(asm):
             order.append(name)
             count[name] = 0
             descs[name] = desc
+            objs[name] = []
         count[name] += n
-    return [(name, descs[name], count[name]) for name in order]
+        objs[name].append(o)
+    return [(name, descs[name], count[name]) for name in order], objs
 
 
 def _sheet(doc, asm):
@@ -158,8 +169,7 @@ def show(asm, data, sheet):
     v.addWidget(t)
     note = QtWidgets.QLabel(f"Saved in the tree as <b>{sheet.Label}</b>. Run Bill of "
                             "Materials again after changing the assembly to update it. "
-                            "To put it on a drawing, use the spreadsheet view "
-                            "(TechDraw: Insert Spreadsheet View).")
+                            "Make Drawing puts it on a sheet with numbered balloons.")
     note.setWordWrap(True)
     v.addWidget(note)
     b = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Close)

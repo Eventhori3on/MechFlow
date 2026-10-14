@@ -499,26 +499,71 @@ def _is_fastener(o):
     return type(getattr(o, "Proxy", None)).__name__ == "FSScrewObject"
 
 
-def interferences(asm, tol=1.0, fastener_pairs=False):
+_CACHE = {}          # (key A, key B) -> overlap volume, per session
+
+
+def _deep_overlap(b1, b2, eps=0.05):
+    """Boxes that really overlap - not just touching (a nut on a flange face,
+    a pipe butted to an elbow): those can't interfere."""
+    return (min(b1.XMax, b2.XMax) - max(b1.XMin, b2.XMin) > eps and
+            min(b1.YMax, b2.YMax) - max(b1.YMin, b2.YMin) > eps and
+            min(b1.ZMax, b2.ZMax) - max(b1.ZMin, b2.ZMin) > eps)
+
+
+def _key(o, shape):
+    """Changes when the part's shape or position does."""
+    bb = shape.BoundBox
+    return (o.Document.Name, o.Name, round(shape.Volume, 3),
+            tuple(round(x, 3) for x in (bb.XMin, bb.YMin, bb.ZMin, bb.XMax, bb.YMax, bb.ZMax)))
+
+
+def _near(shape, box):
+    """The solids of shape whose boxes overlap box (a part's other solids
+    are far away: no need to intersect them)."""
+    sols = [x for x in shape.Solids if _deep_overlap(x.BoundBox, box)]
+    if not sols:
+        return None
+    import Part
+    return sols[0] if len(sols) == 1 else Part.makeCompound(sols)
+
+
+def interferences(asm, tol=1.0, fastener_pairs=False, progress=None):
     """[(part A, part B, overlap volume mm^3)] for parts that overlap by more
     than tol. A bolt through its own nut and washer always 'overlaps' (the
     thread is modelled at full size), so pairs of fasteners are left out
-    unless fastener_pairs."""
+    unless fastener_pairs. Results are remembered, so checking again after
+    an edit only re-tests the parts that moved or changed. progress(i, n)
+    can return False to stop."""
     comps = components(asm)
-    found = []
+    keys = [_key(o, sh) for o, sh in comps]
+    boxes = [sh.BoundBox for o, sh in comps]
+    todo = []
     for i in range(len(comps)):
         for j in range(i + 1, len(comps)):
-            (a, sa), (b, sb) = comps[i], comps[j]
+            a, b = comps[i][0], comps[j][0]
             if not fastener_pairs and _is_fastener(a) and _is_fastener(b):
                 continue
-            if not sa.BoundBox.intersect(sb.BoundBox):
+            if not _deep_overlap(boxes[i], boxes[j]):
                 continue
+            todo.append((i, j))
+    found = []
+    for n, (i, j) in enumerate(todo):
+        if progress is not None and n % 10 == 0 and progress(n, len(todo)) is False:
+            break
+        (a, sa), (b, sb) = comps[i], comps[j]
+        ck = (keys[i], keys[j])
+        v = _CACHE.get(ck)
+        if v is None:
             try:
-                v = sa.common(sb).Volume
+                pa, pb = _near(sa, boxes[j]), _near(sb, boxes[i])
+                v = 0.0 if pa is None or pb is None else pa.common(pb).Volume
             except Exception:
-                continue
-            if v > tol:
-                found.append((a, b, v))
+                v = 0.0
+            _CACHE[ck] = v
+        if v > tol:
+            found.append((a, b, v))
+    if progress is not None:
+        progress(len(todo), len(todo))
     return found
 
 
@@ -528,7 +573,24 @@ def interference_detection():
         QtWidgets.QMessageBox.information(Gui.getMainWindow(), "Interference Detection",
                                           "Open an assembly first.")
         return None
-    found = interferences(asm)
+    dlg = QtWidgets.QProgressDialog("Checking for overlapping parts...", "Cancel", 0, 100,
+                                    Gui.getMainWindow())
+    dlg.setWindowTitle("Interference Detection")
+    dlg.setMinimumDuration(400)
+    stopped = []
+
+    def progress(i, n):
+        dlg.setMaximum(max(1, n))
+        dlg.setValue(i)
+        QtWidgets.QApplication.processEvents()
+        if dlg.wasCanceled():
+            stopped.append(True)
+            return False
+        return True
+    found = interferences(asm, progress=progress)
+    dlg.close()
+    if stopped:
+        return None
     Gui.Selection.clearSelection()
     if not found:
         QtWidgets.QMessageBox.information(Gui.getMainWindow(), "Interference Detection",

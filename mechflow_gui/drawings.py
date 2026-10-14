@@ -107,12 +107,19 @@ def source_objects():
 
 
 def _bbox(objs):
+    """Bounding box of the solids (a Part's origin planes don't count)."""
+    import Part
     box = None
     for o in objs:
         try:
-            bb = o.Shape.BoundBox
+            sh = Part.getShape(o)
+            solids = sh.Solids
+            bb = Part.makeCompound(solids).BoundBox if solids else sh.BoundBox
         except Exception:
-            continue
+            try:
+                bb = o.Shape.BoundBox
+            except Exception:
+                continue
         box = bb if box is None else box.united(bb)
     return box
 
@@ -134,35 +141,70 @@ def _sheet_area(template):
     return W, H, 20.0, 10.0, min(185.0, W * 0.45), 60.0
 
 
+DIM_ROOM = 25.0      # space left of / under the views for dimensions
+
+
+def _areas(template, with_iso):
+    W, H, left, margin, tb_w, tb_h = _sheet_area(template)
+    full_w = (W - left - margin) * (0.62 if with_iso else 0.9)
+    return {"W": W, "H": H, "left": left, "margin": margin, "tb_w": tb_w, "tb_h": tb_h,
+            "full_w": full_w, "full_h": H - 2 * margin,
+            "above_h": H - 2 * margin - tb_h - 5,
+            "left_w": min(full_w, W - left - margin - tb_w - 5)}
+
+
+def _block(bb, scale, gap=15.0):
+    sx, sy, sz = bb.XLength * scale, bb.YLength * scale, bb.ZLength * scale
+    return sy + gap + sx + DIM_ROOM, sz + gap + sy + DIM_ROOM
+
+
+def fit_mode(bb, scale, template, with_iso=True):
+    """'above' (clear of the title block, full width), 'left' (beside it,
+    full height) or None if the views don't fit at this scale."""
+    a = _areas(template, with_iso)
+    bw, bh = _block(bb, scale)
+    if bw <= a["full_w"] and bh <= a["above_h"]:
+        return "above"
+    if bw <= a["left_w"] and bh <= a["full_h"]:
+        return "left"
+    return None
+
+
 def pick_scale(objs, template, with_iso=True):
     bb = _bbox(objs)
     if bb is None:
         return 1.0
-    W, H, left, margin, tb_w, tb_h = _sheet_area(template)
-    gap = 15.0
-    span_w = bb.XLength + bb.YLength           # Front + Right side by side
-    span_h = bb.ZLength + bb.YLength           # Front + Top stacked
-    avail_w = (W - left - margin) * (0.62 if with_iso else 0.9) - gap
-    avail_h = (H - 2 * margin) * 0.85 - gap
-    fit = min(avail_w / max(span_w, 1e-6), avail_h / max(span_h, 1e-6))
     for s in SCALES:
-        if s <= fit:
+        if fit_mode(bb, s, template, with_iso):
             return s
     return SCALES[-1]
 
 
-def _place(page, template, group, iso, objs, scale, projection):
-    """Centre the 3 views in the space left of the title block / isometric,
-    and put the isometric top right."""
+def sheet_fill(objs, template, scale, with_iso=True):
+    """How much of the usable height the views take (0..1)."""
     bb = _bbox(objs)
-    W, H, left, margin, tb_w, tb_h = _sheet_area(template)
+    a = _areas(template, with_iso)
+    bw = (bb.XLength + bb.YLength) * scale          # the views themselves
+    bh = (bb.ZLength + bb.YLength) * scale
+    return max(bw / a["full_w"], bh / a["full_h"])
+
+
+def _place(page, template, group, iso, objs, scale, projection):
+    """The 3 views clear of the title block (above it, or beside it), with
+    room for dimensions, and the isometric top right."""
+    bb = _bbox(objs)
+    a = _areas(template, iso is not None)
     gap = 15.0                                  # FreeCAD's default view spacing
     sx, sy, sz = bb.XLength * scale, bb.YLength * scale, bb.ZLength * scale
-    area_w = (W - left - margin) * (0.62 if iso is not None else 0.95)
-    area_h = H - 2 * margin
     block_w, block_h = sy + gap + sx, sz + gap + sy
-    bl = left + max(0.0, (area_w - block_w) / 2)
-    bb_y = margin + max(0.0, (area_h - block_h) / 2)
+    mode = fit_mode(bb, scale, template, iso is not None) or "left"
+    if mode == "above":
+        bl = a["left"] + DIM_ROOM + max(0.0, (a["full_w"] - block_w - DIM_ROOM) / 2)
+        floor = a["margin"] + a["tb_h"] + 5 + DIM_ROOM
+        bb_y = floor + max(0.0, (a["above_h"] - block_h - DIM_ROOM) / 2)
+    else:
+        bl = a["left"] + DIM_ROOM + max(0.0, (a["left_w"] - block_w - DIM_ROOM) / 2)
+        bb_y = a["margin"] + DIM_ROOM + max(0.0, (a["full_h"] - block_h - DIM_ROOM) / 2)
     if projection == FIRST:      # [Right][Front] / [Top] under the Front
         group.X = bl + sy + gap + sx / 2
         group.Y = bb_y + sy + gap + sz / 2
@@ -170,6 +212,7 @@ def _place(page, template, group, iso, objs, scale, projection):
         group.X = bl + sx / 2
         group.Y = bb_y + sz / 2
     if iso is not None:
+        W, H, margin, tb_h = a["W"], a["H"], a["margin"], a["tb_h"]
         d = bb.DiagonalLength * scale * 0.8
         iso.X = W - margin - 10 - d / 2
         iso.Y = max(H - margin - 10 - d / 2, tb_h + margin + d / 2)
@@ -385,9 +428,34 @@ def active_page():
     return None
 
 
+def _projection():
+    proj = App.ParamGet(PARAMS).GetString("DrawingProjection", FIRST)
+    return proj if proj in (FIRST, THIRD) else FIRST
+
+
+def _assembly_in(objs):
+    for o in objs:
+        if o.TypeId == "Assembly::AssemblyObject":
+            return o
+    try:
+        from mechflow_gui import assembly
+        if not objs or all(o.TypeId == "Assembly::AssemblyObject" for o in objs):
+            return assembly.active_assembly()
+    except Exception:
+        pass
+    return None
+
+
 def make_drawing():
-    """Make Drawing from Part (SOLIDWORKS: File > Make Drawing from Part)."""
+    """Make Drawing from Part / Assembly (SOLIDWORKS: File > Make Drawing
+    from Part). An assembly gets the drawing pack: BOM, balloons and a sheet
+    per part."""
     objs = source_objects()
+    asm = _assembly_in(objs)
+    if asm is not None:
+        from mechflow_gui import drawing_pack
+        pages = drawing_pack.make_drawing_from_assembly(asm)
+        return pages[0] if pages else None
     if not objs:
         QtWidgets.QMessageBox.information(
             Gui.getMainWindow(), "Make Drawing",
@@ -401,7 +469,7 @@ def make_drawing():
     doc.openTransaction("Make Drawing")
     try:
         page = new_page(doc, sheet)
-        add_standard_views(page, objs, projection, with_iso)
+        g, _iso, scale = add_standard_views(page, objs, projection, with_iso)
         doc.commitTransaction()
     except Exception as e:
         doc.abortTransaction()
@@ -409,6 +477,15 @@ def make_drawing():
                                       f"The drawing couldn't be made:\n{e}")
         return None
     _open(page)
+    if App.ParamGet(PARAMS).GetBool("DrawingAutoDims", True):
+        try:
+            from mechflow_gui import drawing_pack
+            doc.openTransaction("Dimensions")
+            wait_for_views(page)
+            drawing_pack.decorate_part_page(page, g, scale)
+            doc.commitTransaction()
+        except Exception as e:
+            App.Console.PrintWarning(f"MechFlow: automatic dimensions skipped ({e})\n")
     return page
 
 
