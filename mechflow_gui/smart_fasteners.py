@@ -18,6 +18,7 @@ Uses the Toolbox (and so the Fasteners Workbench) to make the fasteners.
 import math
 
 import FreeCAD as App
+from mechflow_gui import edge_curve, curve_name  # noqa: F401
 import FreeCADGui as Gui
 
 try:
@@ -246,7 +247,7 @@ class Stack:
     # ---- for the Toolbox
     def _circle(self, entry, t, r):
         for i, e in enumerate(entry.shape.Edges):
-            c = getattr(e, "Curve", None)
+            c = edge_curve(e)
             if type(c).__name__ != "Circle" or abs(c.Radius - r) > 1e-3:
                 continue
             d = c.Center - self.p0
@@ -261,7 +262,7 @@ class Stack:
         # the outermost circle at the head end (counterbore / countersink top)
         best = None
         for i, e in enumerate(self.head.shape.Edges):
-            c = getattr(e, "Curve", None)
+            c = edge_curve(e)
             if type(c).__name__ != "Circle":
                 continue
             d = c.Center - self.p0
@@ -312,7 +313,7 @@ class Stack:
                     if type(f.Surface).__name__ != "Cone":
                         continue
                     for e in f.Edges:
-                        c = getattr(e, "Curve", None)
+                        c = edge_curve(e)
                         if type(c).__name__ == "Circle" and abs(c.Radius - cr) < 1e-4 \
                                 and (c.Center - cc).Length < 1e-4:
                             return "ISO10642"

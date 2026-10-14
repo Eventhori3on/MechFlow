@@ -18,6 +18,7 @@ Each mate is one of FreeCAD's assembly joints underneath:
 """
 
 import FreeCAD as App
+from mechflow_gui import edge_curve, curve_name  # noqa: F401
 import FreeCADGui as Gui
 
 try:
@@ -124,7 +125,7 @@ def _kind(shape):
         t = type(shape.Surface).__name__
         return "plane" if t == "Plane" else ("round" if t in ("Cylinder", "Cone") else "face")
     if st == "Edge":
-        t = type(shape.Curve).__name__
+        t = curve_name(shape)
         return "line" if t in ("Line", "LineSegment") else ("round" if t == "Circle" else "edge")
     if st == "Vertex":
         return "point"

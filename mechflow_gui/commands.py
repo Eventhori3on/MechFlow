@@ -719,6 +719,15 @@ def register():
         "Author Component", "Make your own valve, instrument or fitting model a routing "
         "library part: click its port edges, name it, OK", icon_path("AuthorComponent.svg"),
         lambda: _run("inline", "author_component"), lambda: App.ActiveDocument is not None))
+    Gui.addCommand("MechFlow_ChangePipeSize", _simple(
+        "Change Pipe Size", "Change a route's pipe size from the selected pipe on: it carries "
+        "on downstream until the next change, with reducers where it steps",
+        icon_path("ChangeSize.svg"), lambda: _run("routing", "change_pipe_size"),
+        lambda: App.ActiveDocument is not None))
+    Gui.addCommand("MechFlow_PipeSpecs", _simple(
+        "Pipe Specs", "Pipe specs routes follow: standard, material, schedule by size, "
+        "elbows, flange rating, free ends - built-in ones and your own",
+        icon_path("PipeSpec.svg"), lambda: _run("pipespec", "edit_specs"), lambda: True))
     Gui.addCommand("MechFlow_RoutePipe", _simple(
         "Route Pipe", "Pipe along sketch lines: pipe cut to length, elbows at the bends, "
         "tees at branches, flanges at the ends - rebuilds when you edit the sketch",

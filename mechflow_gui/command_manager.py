@@ -189,6 +189,8 @@ TABS = [
         ("Route\nPipe", "MechFlow_RoutePipe"),
         ("Valves &\nInstruments", "MechFlow_Valves"),
         ("Author\nComponent", "MechFlow_AuthorComponent"),
+        ("stack", [("Pipe Specs", "MechFlow_PipeSpecs"),
+                   ("Change Pipe Size", "MechFlow_ChangePipeSize")]),
         None,
         ("stack", [("Toolbox", "MechFlow_Toolbox"),
                    ("Nozzle", "MechFlow_Nozzle"),

@@ -19,6 +19,7 @@ lists them by profile and length, with the cut angles.
 import math
 
 import FreeCAD as App
+from mechflow_gui import edge_curve, curve_name  # noqa: F401
 import FreeCADGui as Gui
 
 try:
@@ -99,7 +100,7 @@ def _bar(t, size, length, rotation, mirror):
     if rounds:
         by_r = {}
         for i, e in enumerate(solid.Edges):
-            if type(getattr(e, "Curve", None)).__name__ not in ("Line", "LineSegment"):
+            if curve_name(e) not in ("Line", "LineSegment"):
                 continue
             p, q = e.Vertexes[0].Point, e.Vertexes[-1].Point
             if abs(p.x - q.x) > TOL or abs(p.y - q.y) > TOL:
@@ -165,7 +166,7 @@ def segments(links):
                 e = Part.getShape(obj, sub, needSubElement=True, noElementMap=True)
             except Exception:
                 continue
-            if type(getattr(e, "Curve", None)).__name__ not in ("Line", "LineSegment"):
+            if curve_name(e) not in ("Line", "LineSegment"):
                 continue
             if e.Length < 1e-6:
                 continue
@@ -496,7 +497,7 @@ def is_member(o):
 
 def _all_lines(obj):
     return [f"Edge{i + 1}" for i, e in enumerate(obj.Shape.Edges)
-            if type(getattr(e, "Curve", None)).__name__ in ("Line", "LineSegment")]
+            if curve_name(e) in ("Line", "LineSegment")]
 
 
 def _expand(links):

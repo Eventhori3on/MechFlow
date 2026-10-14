@@ -197,6 +197,17 @@ Each feature has its own panel, and you edit it again by double-clicking.
     gaskets and bolts go in. Drag the ring (degree callout, 5° steps) to turn
     it round the pipe, drag the arrow (mm callout) to slide it along, or type
     both. They stay put when the route rebuilds.
+  - **Pipe Specs:** pick a spec in Route Pipe (EN carbon steel PN16, ASME CS
+    Class 150 Sch 40, stainless...) and the route takes its standard,
+    material, schedule (by size, for ASME), elbows, flange rating and free
+    ends. Duplicate a built-in spec to make your own; change it and every
+    route using it follows. The material goes on the parts and in the BOM.
+  - **Change Pipe Size:** right-click a pipe of a route. The new size runs
+    on downstream until the next change, with concentric reducers where it
+    steps (two in a row for a bigger step). Valves and fittings after it
+    take the new size. A library part with different end sizes (a DN100 x
+    DN80 control valve, say) changes the size after it, and the route
+    checks it's the right way round.
   - **Author Component:** open your own valve, strainer or sensor model,
     click its port edges (two for an inline part, one for a branch part),
     name it and OK: it joins the Valves & Instruments list and places, turns

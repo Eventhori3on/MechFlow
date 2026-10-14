@@ -17,6 +17,7 @@ import os
 from xml.sax.saxutils import escape
 
 import FreeCAD as App
+from mechflow_gui import edge_curve, curve_name  # noqa: F401
 import FreeCADGui as Gui
 
 try:
@@ -339,7 +340,7 @@ def _circles(view):
     """[(index, centre, radius)] of the view's full circles."""
     out = []
     for i, e in _edges(view):
-        c = getattr(e, "Curve", None)
+        c = edge_curve(e)
         if type(c).__name__ == "Circle" and abs(e.LastParameter - e.FirstParameter) > 6.2:
             out.append((i, V(c.Center), c.Radius))
     return out
@@ -415,7 +416,7 @@ def _datums(view, c, xmin, ymin):
     nozzle flange sticking out)."""
     vert, horiz = [], []
     for _i, e in _edges(view):
-        if type(getattr(e, "Curve", None)).__name__ not in ("Line", "LineSegment"):
+        if curve_name(e) not in ("Line", "LineSegment"):
             continue
         p0, p1 = e.Vertexes[0].Point, e.Vertexes[-1].Point
         if abs(p0.x - p1.x) < 1e-6 and p0.x <= c.x + 1e-6:

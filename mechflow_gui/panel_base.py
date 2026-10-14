@@ -11,6 +11,7 @@ Selections are read by polling (no Qt hooks into FreeCAD widgets).
 """
 
 import FreeCAD as App
+from mechflow_gui import edge_curve, curve_name  # noqa: F401
 import FreeCADGui as Gui
 
 try:
@@ -176,9 +177,9 @@ class PickField:
                 return (obj, sub)
             if "linear" in self.kinds or "axis" in self.kinds:
                 try:
-                    if type(shp.Curve).__name__ in ("Line", "LineSegment"):
+                    if curve_name(shp) in ("Line", "LineSegment"):
                         return (obj, sub)
-                    if "axis" in self.kinds and type(shp.Curve).__name__ == "Circle":
+                    if "axis" in self.kinds and curve_name(shp) == "Circle":
                         return (obj, sub)
                 except Exception:
                     pass

@@ -172,6 +172,8 @@ class MechFlowWorkbench(Gui.Workbench):
             if any(i.Object.TypeId == "PartDesign::Body" and not i.SubElementNames
                    for i in sel):
                 items.append("MechFlow_EditMaterial")
+            if any(getattr(i.Object, "RouteLine", "") for i in sel):
+                items.append("MechFlow_ChangePipeSize")
             if items:
                 self.appendContextMenu("", items + ["Separator"])
         except Exception:
@@ -182,3 +184,22 @@ class MechFlowWorkbench(Gui.Workbench):
 
 
 Gui.addWorkbench(MechFlowWorkbench())
+
+
+def _mechflow_app_icon():
+    """MechFlow's icon on the FreeCAD window, taskbar and dialogs: set as soon
+    as FreeCAD's event loop runs, and again once start-up is done."""
+    try:
+        try:
+            from PySide6 import QtCore
+        except ImportError:
+            from PySide2 import QtCore
+        from mechflow_gui import app_icon
+        for ms in (0, 4000):
+            QtCore.QTimer.singleShot(ms, app_icon.apply)
+        QtCore.QTimer.singleShot(0, app_icon.brand_title)
+    except Exception:
+        pass
+
+
+_mechflow_app_icon()

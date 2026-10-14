@@ -20,6 +20,7 @@ import re
 import zipfile
 
 import FreeCAD as App
+from mechflow_gui import edge_curve, curve_name  # noqa: F401
 import FreeCADGui as Gui
 
 try:
@@ -64,7 +65,7 @@ def dxf_text(edges, layer="0"):
         out.extend(["0", "LINE", "8", layer, "10", f"{a.x:.4f}", "20", f"{a.y:.4f}", "30", "0",
                     "11", f"{b.x:.4f}", "21", f"{b.y:.4f}", "31", "0"])
     for e in edges:
-        kind = type(e.Curve).__name__
+        kind = curve_name(e)
         if kind in ("Line", "LineSegment"):
             line(e.Vertexes[0].Point, e.Vertexes[-1].Point)
         elif kind == "Circle" and e.isClosed():
@@ -93,7 +94,7 @@ def flat_edges(face):
     # x along the longest straight edge, so the profile sits square
     xdir = None
     for e in sorted(face.OuterWire.Edges, key=lambda e: -e.Length):
-        if type(e.Curve).__name__ in ("Line", "LineSegment"):
+        if curve_name(e) in ("Line", "LineSegment"):
             xdir = e.Vertexes[-1].Point - e.Vertexes[0].Point
             break
     rot = App.Rotation(xdir or V(1, 0, 0), n.cross(xdir or V(1, 0, 0)), n, "ZXY") if xdir \
@@ -289,7 +290,7 @@ def _points(edges):
     for e in edges:
         m = e.valueAt((e.FirstParameter + e.LastParameter) / 2)
         pts.append((m.x, m.y))
-        if type(e.Curve).__name__ == "Circle":
+        if curve_name(e) == "Circle":
             pts.append((e.Curve.Center.x, e.Curve.Center.y))
     return pts
 

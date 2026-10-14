@@ -459,6 +459,21 @@ class Sketch3DPanel:
         self._labels = []
         self._install()
         self._refresh()
+        # if the panel goes without OK / Cancel (its document closed...),
+        # take the preview, callbacks and length box away
+        self._watch = QtCore.QTimer()
+        self._watch.setInterval(500)
+        self._watch.timeout.connect(self._check_alive)
+        self._watch.start()
+
+    def _check_alive(self):
+        from mechflow_gui import widget_alive
+        if not widget_alive(self.form):
+            self._watch.stop()
+            try:
+                self._uninstall()
+            except Exception:
+                pass
 
     # -- UI
     def _build(self):
@@ -672,6 +687,10 @@ class Sketch3DPanel:
         self._box = vh.ViewBox(" mm", 0, 1e6, 0)
 
     def _uninstall(self):
+        try:
+            self._watch.stop()
+        except Exception:
+            pass
         for t, cb in self._cbs:
             try:
                 self.view.removeEventCallbackPivy(t, cb)

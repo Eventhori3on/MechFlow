@@ -45,7 +45,9 @@ def _fastener_row(o):
 
 def _std_row(o):
     from mechflow_gui import stdparts
-    return stdparts.object_designation(o), stdparts.description(o.StdType)
+    desc = stdparts.description(o.StdType)
+    mat = getattr(o, "MechFlowMaterial", "") or ""
+    return stdparts.object_designation(o), (f"{desc}, {mat}" if mat else desc)
 
 
 def _is_std(o):

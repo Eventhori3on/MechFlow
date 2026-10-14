@@ -12,6 +12,7 @@ Axis:
 """
 
 import FreeCAD as App
+from mechflow_gui import edge_curve, curve_name  # noqa: F401
 import FreeCADGui as Gui
 
 from mechflow_gui.panel_base import FeaturePanel, PickField, has, set_enum, open_panel
@@ -47,7 +48,7 @@ def _kind(obj, sub):
         return "plane" if t == "Plane" else ("round" if t in ("Cylinder", "Cone") else "face")
     if sub.startswith("Edge"):
         try:
-            t = type(shp.Curve).__name__
+            t = curve_name(shp)
         except Exception:
             t = ""
         return "line" if t in ("Line", "LineSegment") else ("round" if t == "Circle" else "edge")

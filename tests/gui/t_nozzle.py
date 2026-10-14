@@ -225,4 +225,28 @@ def reopen():
         log("reopened", n, "invalid:", bad)
         assert not bad
 at(reopen, 800)
+
+
+def dished_head():
+    # a nozzle and flange on a vessel's ellipsoidal head: some of its edges
+    # have no usable Curve ("undefined curve type") - that used to crash
+    import Part
+    from mechflow_gui import nozzle
+    d = App.newDocument("Dished")
+    b = d.addObject("PartDesign::Body", "Body")
+    cyl = b.newObject("PartDesign::AdditiveCylinder", "Shell"); cyl.Radius = 400; cyl.Height = 800
+    e = b.newObject("PartDesign::AdditiveEllipsoid", "Head")
+    e.Radius1 = 200; e.Radius2 = 400; e.Radius3 = 400
+    e.Placement = App.Placement(App.Vector(0, 0, 800), App.Rotation())
+    t = b.newObject("PartDesign::Thickness", "Hollow")
+    t.Base = (cyl, ["Face3"]); t.Value = 8; t.Reversed = True
+    d.recompute()
+    log("hollow body valid", b.Shape.isValid(), "solids", len(b.Shape.Solids))
+    n = nozzle.make(b, App.Vector(200, 0, 900), App.Vector(0, 0, 1), "EN 10220", "DN50", "", 120)
+    d.recompute()
+    fl = nozzle.add_flange(n, "EN1092-1-11", "PN16")[0]
+    d.recompute()
+    log("nozzle on the head:", n.isValid(), "| flange", fl.Label, fl.isValid())
+    assert n.isValid() and fl.isValid()
+at(dished_head, 800)
 run()

@@ -22,6 +22,7 @@ import math
 import os
 
 import FreeCAD as App
+from mechflow_gui import edge_curve, curve_name  # noqa: F401
 import FreeCADGui as Gui
 
 try:
@@ -201,12 +202,12 @@ class Hole:
                                   noElementMap=True)
         except Exception:
             return
-        if not hasattr(edge, "Curve") or type(edge.Curve).__name__ != "Circle":
+        if curve_name(edge) != "Circle":
             return
         c, ax = edge.Curve.Center, App.Vector(edge.Curve.Axis).normalize()
         coax = []
         for i, e in enumerate(solid.Edges):
-            if type(e.Curve).__name__ != "Circle" or e.Curve.Radius < 0.5:
+            if curve_name(e) != "Circle" or e.Curve.Radius < 0.5:
                 continue
             a2 = App.Vector(e.Curve.Axis).normalize()
             if abs(abs(a2.dot(ax)) - 1) > 1e-6:
@@ -558,8 +559,8 @@ def attachable_selection(container=None):
                 shape = Part.getShape(obj, sub, needSubElement=True, noElementMap=True)
             except Exception:
                 continue
-            if hasattr(shape, "Curve"):
-                if type(shape.Curve).__name__ == "Circle" and not dup(shape):
+            if edge_curve(shape) is not None:
+                if curve_name(shape) == "Circle" and not dup(shape):
                     out.append((obj, [sub]))
             elif isinstance(shape, Part.Face):
                 pre = ".".join(sub.split(".")[:-1])
@@ -567,7 +568,7 @@ def attachable_selection(container=None):
                                       needSubElement=False, noElementMap=True)
                 outer = shape.OuterWire.Edges
                 for e in shape.Edges:
-                    if type(e.Curve).__name__ != "Circle" or any(o.isSame(e) for o in outer):
+                    if curve_name(e) != "Circle" or any(o.isSame(e) for o in outer):
                         continue
                     name = edge_name(whole, e)
                     if name is None or dup(e):

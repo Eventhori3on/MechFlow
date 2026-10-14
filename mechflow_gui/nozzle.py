@@ -14,6 +14,7 @@ feature), so it moves with the part and can be edited by double-clicking.
 import math
 
 import FreeCAD as App
+from mechflow_gui import edge_curve, curve_name  # noqa: F401
 import FreeCADGui as Gui
 
 try:
@@ -218,7 +219,7 @@ def end_edge(feature):
     shape = feature.Shape
     best = None
     for i, e in enumerate(shape.Edges):
-        c = getattr(e, "Curve", None)
+        c = edge_curve(e)
         if type(c).__name__ == "Circle" and abs(c.Radius - od / 2) < 1e-3 and \
                 (c.Center - end).Length < 1e-3:
             best = f"Edge{i + 1}"

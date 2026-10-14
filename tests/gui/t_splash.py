@@ -11,6 +11,27 @@ def setup():
     QtWidgets.QMessageBox.exec = auto
     Gui.activateWorkbench("MechFlowWorkbench")
 at(setup, 1500)
+
+
+def app_icon():
+    # MechFlow's icon on the window and as the fallback for panels/dialogs
+    ic = QtWidgets.QApplication.windowIcon()
+    sizes = sorted(sz.width() for sz in ic.availableSizes())
+    mw = Gui.getMainWindow().windowIcon()
+    panel = QtWidgets.QWidget().windowIcon()
+    img = mw.pixmap(32, 32).toImage()
+    c = img.pixelColor(16, 6)                    # top face of the block: light blue
+    log("app icon sizes", sizes, "| window icon top colour", c.name(), "| panel falls back to it",
+        panel.cacheKey() == ic.cacheKey())
+    assert 256 in sizes and c.blue() > 200 and c.red() < 140
+    from mechflow_gui import app_icon
+    d = App.newDocument("TitleCheck")
+    QtWidgets.QApplication.processEvents()
+    t = Gui.getMainWindow().windowTitle()
+    log("window title", repr(t))
+    assert f"MechFlow {app_icon.version()} \u00b7 FreeCAD " in t and "TitleCheck" in t
+    App.closeDocument(d.Name)
+at(app_icon, 300)
 def s(): from mechflow_gui import splash; return splash
 at(lambda: log("state before:", s().state(), "| branding path:", s().branding_path()), 100)
 at(lambda: Gui.runCommand("MechFlow_InstallSplash", 0), 500)

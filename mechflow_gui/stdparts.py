@@ -13,6 +13,7 @@ flange to the mating flange, a bearing to the shaft or the housing bore.
 import math
 
 import FreeCAD as App
+from mechflow_gui import edge_curve, curve_name  # noqa: F401
 
 from mechflow_gui import stdparts_data as T
 
@@ -835,7 +836,7 @@ def _hole_edges(obj, centre, normal, radius, back):
     sh = obj.Shape
     holes = {}
     for i, e in enumerate(sh.Edges):
-        c = getattr(e, "Curve", None)
+        c = edge_curve(e)
         if type(c).__name__ != "Circle" or abs(c.Radius - radius) > 1e-3:
             continue
         d = c.Center - centre

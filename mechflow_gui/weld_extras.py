@@ -4,6 +4,7 @@
 import math
 
 import FreeCAD as App
+from mechflow_gui import edge_curve, curve_name  # noqa: F401
 import FreeCADGui as Gui
 
 try:
@@ -133,7 +134,7 @@ def _plate_axes(face, n):
     """In-plane directions for a plate on a member's end: along its straight
     sides, or the nearest of X / Y for a round tube."""
     for e in face.OuterWire.Edges:
-        if type(e.Curve).__name__ in ("Line", "LineSegment"):
+        if curve_name(e) in ("Line", "LineSegment"):
             u = e.Vertexes[-1].Point - e.Vertexes[0].Point
             u = u - n * u.dot(n)
             if u.Length > 1e-6:

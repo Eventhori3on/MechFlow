@@ -26,6 +26,7 @@ import math
 import os
 
 import FreeCAD as App
+from mechflow_gui import edge_curve, curve_name  # noqa: F401
 import FreeCADGui as Gui
 
 try:
@@ -316,6 +317,59 @@ def ftf_and_end(comp, standard, size):
         "wafer" if comp.Kind == "Butterfly valve" else "flanged")
 
 
+def nominal_size(standard, rating, dia, end="flanged"):
+    """The pipe size a port edge of this diameter belongs to: a flange's
+    outside or raised-face diameter (flanged ends; the route's rating
+    first, then the others - a part keeps the flanges it was modelled
+    with) or the pipe's outside diameter (weld ends). None if nothing
+    matches closely."""
+    from mechflow_gui import routing, stdparts
+    ty = routing.types_for(standard)
+    ratings = [rating] + [r for r in stdparts.ratings(ty["flange"]) if r != rating]
+    best = None
+    for size in routing.sizes_for(standard):
+        cands = []
+        if end in ("flanged", "wafer"):
+            for k, rt in enumerate(ratings):
+                try:
+                    info = stdparts.flange_info(ty["flange"], size, rt)
+                except Exception:
+                    continue
+                cands += [(info["OD"], 0, k), (info["face"], 1, k)]
+        try:
+            cands.append((routing.fitting_dims(standard, size, "Sch 40",
+                                               routing.BENDS[standard][0])[0],
+                          0 if end not in ("flanged", "wafer") else 2, 0))
+        except Exception:
+            pass
+        for d_, pref, k in cands:
+            rel = abs(d_ - dia) / max(d_, 1e-6)
+            key = (rel > 0.005, pref, k > 0, rel)
+            if best is None or key < best[0]:
+                best = (key, size)
+    if best is None or best[0][3] > 0.04:
+        return None
+    return best[1]
+
+
+def port_sizes(comp, standard, rating):
+    """(port A size, port B size) of a library part with two ports whose
+    diameters match standard sizes - so the route can check the pipe it
+    sits in and change size after it - else None (it follows the pipe)."""
+    if getattr(comp, "Kind", "") != "Library part":
+        return None
+    try:
+        ports = json.loads(comp.Ports or "[]")
+    except Exception:
+        return None
+    if len(ports) != 2 or not all(p.get("dia") for p in ports):
+        return None
+    sizes = [nominal_size(standard, rating, float(p["dia"]), p.get("end", "flanged")) for p in ports]
+    if None in sizes:
+        return None
+    return sizes[0], sizes[1]
+
+
 class PortFlange:
     """A component's flanged end, seen as a flange for bolting (bolt holes
     found on the component itself)."""
@@ -547,6 +601,14 @@ class InlinePanel:
 
     # -- placing
     def _tick(self):
+        from mechflow_gui import widget_alive
+        if not widget_alive(self.form):
+            # the panel went without OK / Cancel (its document closed...):
+            # don't leave the handles and number boxes behind
+            self._timer.stop()
+            self._settle.stop()
+            self._hide_handles()
+            return
         try:
             sel = Gui.Selection.getSelectionEx("", 0)
         except Exception:
@@ -784,24 +846,28 @@ class InlinePanel:
 
 def run_of(comp):
     """(start point, direction, length) of the straight run comp is on
-    (container axes), from its route's path."""
+    (container axes), in flow order (from the route's start)."""
     from mechflow_gui import routing
     r = comp.Route
     if r is None:
         return None
     try:
-        g = routing.Graph(routing.path_segments(routing.path_links(r)))
+        roots = []
+        import Part
+        for x, subs in r.StartFlanges:
+            for sub in subs:
+                try:
+                    e = Part.getShape(x, sub, needSubElement=True, noElementMap=True)
+                    roots.append(V(e.Curve.Center))
+                except Exception:
+                    pass
+        fl = routing.Flow(routing.path_segments_keyed(routing.path_links(r)), roots)
     except Exception:
         return None
     p = V(comp.Position)
     best = None
-    for i, j in g.edges():
-        a, b = g.pts[i], g.pts[j]
-        d = b - a
-        L = d.Length
-        if L < 1e-9:
-            continue
-        d.normalize()
+    for run in fl.runs:
+        a, d, L = run["a"], run["d"], run["L"]
         s = max(0.0, min(L, (p - a).dot(d)))
         dist = (a + d * s - p).Length
         if best is None or dist < best[0]:
@@ -874,10 +940,11 @@ def save_library_item(name, shape, ports, end="flanged", category="Valve", port_
     d = library_dir()
     safe = re.sub(r'[<>:"/\\|?*]+', "-", name).strip(" .") or "Component"
     local, pts = normalise(shape, ports)
-    for p in pts:
+    dias = port_dia if isinstance(port_dia, (list, tuple)) else [port_dia] * len(pts)
+    for p, dia in zip(pts, dias):
         p["end"] = end if len(pts) == 2 else "branch"
-        if port_dia:
-            p["dia"] = round(port_dia, 2)
+        if dia:
+            p["dia"] = round(dia, 2)
     brep = safe + ".brep"
     local.exportBrep(os.path.join(d, brep))
     info = {"name": name, "category": category, "ports": pts, "brep": brep,
@@ -969,7 +1036,7 @@ class AuthorPanel:
             e = Part.getShape(obj, sub, needSubElement=True, noElementMap=True)
         except Exception:
             return False
-        if type(getattr(e, "Curve", None)).__name__ != "Circle":
+        if curve_name(e) != "Circle":
             self.error.setText("Pick round edges (a flange face or pipe end).")
             self.error.show()
             return False
@@ -1004,7 +1071,7 @@ class AuthorPanel:
         ports = [(c, a) for _o, _s, c, a, _d in self.ports]
         end = "weld" if self.end.currentIndex() == 1 else "flanged"
         return save_library_item(self.name.text().strip() or "Component", self._shape(), ports,
-                                 end, self.cat.currentText(), self.ports[0][4])
+                                 end, self.cat.currentText(), [p[4] for p in self.ports])
 
     def accept(self):
         try:
