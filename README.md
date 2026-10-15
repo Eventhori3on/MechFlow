@@ -124,10 +124,36 @@ Each feature has its own panel, and you edit it again by double-clicking.
   are counted together and the file names give thickness and quantity), the
   BOM and weldment cut list as CSV, and a contents list.
 - The title block fills in from the part: name, material, scale, author, date,
-  sheet, and weight on ANSI sheets.
-- The Drawing tab has Model/Projected/Section/Detail views, Smart Dimension,
-  Note, Balloon, Centre Mark, Hatch, Surface Finish, Weld, Sheet Format and
-  Save as PDF/DXF.
+  sheet, and weight on ANSI sheets. Text too long for its box is made smaller
+  to fit (also when you type straight into the drawing).
+- **Title Block** (Drawing tab, or right-click the sheet): every box in a
+  list - type in it, pick its font and size, bold, nudge it right or up.
+  **Move to sheet** makes a box's text a note you can drag anywhere and
+  restyle; **Put back in box** returns it.
+- **Text Box:** type a note, pick the font, size (capital height in mm),
+  bold / italic, colour and a wrap width; drag it into place. Double-click a
+  note to change it; **Ctrl + mouse wheel** over a selected note makes it
+  bigger or smaller.
+- **Projected views drag apart:** the views are laid out once, then let go,
+  so you can drag the top view up or down and the side view left or right -
+  each slides along its line from the front view, so they stay aligned (drag
+  the front view to move them all). **View Spacing** sets the gap between
+  them all at once. **Break Alignment** (right-click a view) frees it to go
+  anywhere - its dimensions go with it - and **Default Alignment** puts it
+  back in line.
+- **Client Sheet:** bring in a client's border and title block - **DXF**
+  (lines, polylines, arcs, circles, ellipses, splines, text, MTEXT and
+  blocks; block attributes become boxes to type in), **SVG**, or a
+  **picture** (PNG / JPG; PDF where FreeCAD's Qt can read it). Keep it the
+  size it was drawn or fit it to a standard sheet, tick any text you want to
+  type over, and it's kept in your sheet formats so Make Drawing lists it.
+- **Right-click on the drawing** gives the choices for what's under the
+  mouse (Break / Default Alignment, View Spacing, Edit Text) and Add Text Box
+  Here, Title Block and Client Sheet, above FreeCAD's own.
+- The Drawing tab has Model/Projected/Section/Detail views, View Spacing,
+  Break / Default Alignment, Smart Dimension, Text Box, Note, Balloon, Centre
+  Mark, Hatch, Surface Finish, Weld, Sheet Format, Title Block, Client Sheet
+  and Save as PDF/DXF.
 
 ![Drawing from a part](docs/screenshots/drawing.png)
 
@@ -212,6 +238,55 @@ Each feature has its own panel, and you edit it again by double-clicking.
     click its port edges (two for an inline part, one for a branch part),
     name it and OK: it joins the Valves & Instruments list and places, turns
     and bolts up like the built-in ones.
+  - **Pipe from Scan:** reverse-engineer pipework from a 3D scan. **Import
+    Scan** reads OBJ, STL or PLY meshes and XYZ / ASC / PTS point clouds of
+    any size (the whole scan is kept for measuring, a lighter copy is shown;
+    it's cached, so opening it again is quick). Any mesh or point cloud
+    already in the document works too. In **Pipe from Scan**, click the pipe
+    wall: MechFlow follows the pipe both ways, through the elbows, until it
+    meets a flange, a plate (bulkhead, deck) or the end of the pipe. It
+    measures the OD (and matches it to EN or ASME), the straights and the
+    corners where they meet, the bend radius (3D / 2D / 5D / LR), reducers
+    in line, and fits standard weld neck flanges to the scan at each end to
+    find their rating and where the joint face is. It picks a pipe spec to
+    match, shows the line in the view coloured by how closely it follows the
+    scan, and OK makes a 3D sketch and a route of it - so it can be edited,
+    have valves added and go in the BOM like any other. Pipe hangers and
+    clamps along the way are stepped over, not taken for flanges.
+    **Checking it:** the scan's points on the pipe are coloured by how far
+    they are off the model (green close, amber check, red far), orange dots
+    mark anything worth a second look (a flange only
+    half seen, a hanger stepped over, a gap bridged, the line just
+    stopping), and **Save report** writes a CSV of what was measured and how
+    well it fits, with what each orange dot is about - the same report is kept on the route.
+    **Correcting it:** drag the orange grip on either end of the line
+    along its pipe, or type a length in its callout (or in the panel): the
+    length is the cut length of the pipe itself - not the elbow or flange -
+    so pipes come out in exact lengths. **Set an end** then click the pipe -
+    the line finishes there; **Carry on past** then click where it stopped wrongly -
+    it follows the pipe on; **Undo corrections** goes back. Each straight
+    can be **Auto** (squared up when within 5° of X / Y / Z), **Square** or
+    **As measured** - as measured, the elbows either side are cut to suit,
+    so a flange sits flat against the one it bolts to. Each end can finish
+    differently (a flange at one end, a plain end through a bulkhead at the
+    other). Work a section at a time: one line from flange to flange.
+  - **Remove from Scan:** a copy of the scan with the modelled pipe taken
+    out - everything on the route's pipes, fittings, flanges and valves,
+    within a margin you set - so the new pipe sits in what's left of the
+    scan. The original scan is kept (hidden) and the copy can be traced
+    again.
+  - **Save Part As** (Routing tab, or right-click a pipe or fitting): save
+    one or more parts on their own, at their own origin, as a FreeCAD part,
+    STEP or both - for spool drawings or to send out. Give each a **part
+    number** (or number them all: prefix, start, step) and a description;
+    files are named by part number, number and description, or description,
+    the saved part (and the STEP product) carries the number, and it can be
+    put on the parts in the model so the BOM lists them by number.
+- **Scan View** (Drawing tab): drawings can't draw a scan, so this puts a
+  picture of the scan with the new pipe in it on the sheet as a labelled
+  reference view - pick the view, the scan's colour and opacity and the
+  pipe's colour; select it and run again to update it after changes.
+  Dimensioned views of the pipework are made the usual way.
 - **Interference Detection** (touching parts aren't counted, results are
   remembered so re-checking after an edit is quick).
 - **Exploded View:** the biggest part stays put and every other one slides out

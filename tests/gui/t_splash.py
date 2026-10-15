@@ -26,8 +26,13 @@ def app_icon():
     assert 256 in sizes and c.blue() > 200 and c.red() < 140
     from mechflow_gui import app_icon
     d = App.newDocument("TitleCheck")
-    QtWidgets.QApplication.processEvents()
-    t = Gui.getMainWindow().windowTitle()
+    import time as _t
+    for _i in range(40):                     # the title follows the new view shortly
+        QtWidgets.QApplication.processEvents()
+        t = Gui.getMainWindow().windowTitle()
+        if "TitleCheck" in t:
+            break
+        _t.sleep(0.05)
     log("window title", repr(t))
     assert f"MechFlow {app_icon.version()} \u00b7 FreeCAD " in t and "TitleCheck" in t
     App.closeDocument(d.Name)

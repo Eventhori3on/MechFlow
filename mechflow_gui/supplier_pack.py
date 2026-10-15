@@ -609,7 +609,7 @@ class PackDialog(QtWidgets.QDialog):
             lay.addWidget(c)
         f = QtWidgets.QFormLayout()
         self.sheet = QtWidgets.QComboBox()
-        self.sheet.addItems(list(drawings.SHEETS))
+        self.sheet.addItems(list(drawings.all_sheets()))
         self.sheet.setCurrentText("A2 (ISO) - Landscape")
         f.addRow("Assembly sheets", self.sheet)
         lay.addLayout(f)

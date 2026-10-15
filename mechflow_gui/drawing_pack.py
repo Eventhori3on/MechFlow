@@ -602,6 +602,8 @@ def _fill(template, values):
         if k in texts:
             texts[k] = val
     template.EditableTexts = texts
+    from mechflow_gui import drawings
+    drawings._fit_title_block(template)
 
 
 def _total_weight(objs):
@@ -836,11 +838,11 @@ class PackDialog(QtWidgets.QDialog):
         lay.addWidget(QtWidgets.QLabel(f"Drawings of <b>{asm.Label}</b>"))
         f = QtWidgets.QFormLayout()
         self.sheet = QtWidgets.QComboBox()
-        self.sheet.addItems(list(drawings.SHEETS))
+        self.sheet.addItems(list(drawings.all_sheets()))
         self.sheet.setCurrentText("A2 (ISO) - Landscape")
         f.addRow("Assembly sheet", self.sheet)
         self.psheet = QtWidgets.QComboBox()
-        self.psheet.addItems([AUTO] + list(drawings.SHEETS))
+        self.psheet.addItems([AUTO] + list(drawings.all_sheets()))
         self.psheet.setCurrentText(AUTO)
         f.addRow("Part sheets", self.psheet)
         lay.addLayout(f)

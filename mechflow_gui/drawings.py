@@ -47,7 +47,30 @@ FIRST, THIRD = "First angle", "Third angle"
 SCALES = [10, 5, 2, 1, 1 / 2, 1 / 5, 1 / 10, 1 / 20, 1 / 50, 1 / 100, 1 / 200]
 
 
+CLIENT = "Client: "
+
+
+def all_sheets():
+    """The standard sheets, then the client sheets kept (Client Sheet)."""
+    out = {k: v[1] for k, v in SHEETS.items()}
+    try:
+        from mechflow_gui import client_sheet
+        for name in client_sheet.library():
+            out[CLIENT + name] = "ISO"
+    except Exception:
+        pass
+    return out
+
+
 def template_path(sheet):
+    if sheet.startswith(CLIENT):
+        try:
+            from mechflow_gui import client_sheet
+            p = client_sheet.library().get(sheet[len(CLIENT):])
+            if p:
+                return p
+        except Exception:
+            pass
     rel = SHEETS.get(sheet, SHEETS[DEFAULT_SHEET])[0]
     return os.path.join(App.getResourceDir(), "Mod", "TechDraw", "Templates", *rel.split("/"))
 
@@ -275,6 +298,16 @@ def fill_title_block(template, objs, scale, sheet_no=1, sheets=1):
         if k in texts and v:
             texts[k] = v
     template.EditableTexts = texts
+    _fit_title_block(template)
+
+
+def _fit_title_block(template):
+    """Long text shrunk to fit its box (and MechFlow's title block settings)."""
+    try:
+        from mechflow_gui import title_block
+        title_block.apply(template)
+    except Exception as e:
+        App.Console.PrintWarning(f"MechFlow: title block not fitted ({e})\n")
 
 
 # ------------------------------------------------------------ building
@@ -322,6 +355,13 @@ def add_standard_views(page, objs, projection=FIRST, with_iso=True, scale=None):
         iso.ScaleType = "Custom"
         iso.Scale = scale
     _place(page, t, g, iso, objs, scale, projection)
+    # laid out once, then let go: each view can be dragged along its line
+    # from the front view (FreeCAD's automatic spacing held them still)
+    try:
+        from mechflow_gui import view_align
+        view_align.free_layout(g, _bbox(objs), scale, projection)
+    except Exception as e:
+        App.Console.PrintWarning(f"MechFlow: views left to FreeCAD's spacing ({e})\n")
     page.Scale = scale
     fill_title_block(t, objs, scale)
     doc.recompute()
@@ -370,9 +410,10 @@ class SheetDialog(QtWidgets.QDialog):
         lay = QtWidgets.QVBoxLayout(self)
         lay.addWidget(QtWidgets.QLabel("Standard sheet size:"))
         self.list = QtWidgets.QListWidget()
-        self.list.addItems(list(SHEETS))
+        self.sheets = all_sheets()
+        self.list.addItems(list(self.sheets))
         last = p.GetString("DrawingSheet", DEFAULT_SHEET)
-        items = self.list.findItems(last if last in SHEETS else DEFAULT_SHEET, _match())
+        items = self.list.findItems(last if last in self.sheets else DEFAULT_SHEET, _match())
         self.list.setCurrentItem(items[0] if items else self.list.item(0))
         self.list.currentTextChanged.connect(self._sheet_changed)
         lay.addWidget(self.list)
@@ -399,7 +440,7 @@ class SheetDialog(QtWidgets.QDialog):
             self.proj.setCurrentText(saved)
 
     def _sheet_changed(self, text):
-        std = SHEETS.get(text, SHEETS[DEFAULT_SHEET])[1]
+        std = self.sheets.get(text, "ISO")
         self.proj.setCurrentText(FIRST if std == "ISO" else THIRD)
 
     def values(self):
@@ -534,15 +575,27 @@ def sheet_format():
     sheet = dlg.values()[0]
     doc = page.Document
     doc.openTransaction("Sheet Format")
-    old = dict(page.Template.EditableTexts)
-    page.Template.Template = template_path(sheet)
-    texts = dict(page.Template.EditableTexts)
+    set_sheet(page, template_path(sheet))
+    doc.commitTransaction()
+    doc.recompute()
+
+
+def set_sheet(page, path):
+    """Put the sheet template at path on page, keeping what was filled in."""
+    t = page.Template
+    try:
+        from mechflow_gui import title_block
+        title_block.change_source(t, path)
+        return
+    except Exception as e:
+        App.Console.PrintWarning(f"MechFlow: title block settings not kept ({e})\n")
+    old = dict(t.EditableTexts)
+    t.Template = path
+    texts = dict(t.EditableTexts)
     for k, v in old.items():           # keep what was filled in
         if k in texts and v:
             texts[k] = v
-    page.Template.EditableTexts = texts
-    doc.commitTransaction()
-    doc.recompute()
+    t.EditableTexts = texts
 
 
 def _view_state(page):

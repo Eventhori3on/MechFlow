@@ -63,7 +63,16 @@ class ViewBox(QtWidgets.QDoubleSpinBox):
             sub = area.activeSubWindow()
             w = sub.widget() if sub is not None else area
             h = view.getSize()[1] if hasattr(view, "getSize") else w.height()
-            pt = w.mapTo(area, QtCore.QPoint(int(x) + dx, int(h - y) + dy))
+            # the view works in screen pixels; with display scaling (125 %,
+            # 150 % on Windows) widgets are placed in scaled units
+            try:
+                dpr = float(w.devicePixelRatioF()) or 1.0
+            except Exception:
+                dpr = 1.0
+            if hasattr(view, "getSize") and dpr != 1.0 and \
+                    abs(view.getSize()[1] - w.height()) <= 2:
+                dpr = 1.0                     # this view already reports scaled units
+            pt = w.mapTo(area, QtCore.QPoint(int(x / dpr) + dx, int((h - y) / dpr) + dy))
             pt.setX(max(0, min(pt.x(), area.width() - self.width())))
             pt.setY(max(0, min(pt.y(), area.height() - self.height())))
             self.move(pt)

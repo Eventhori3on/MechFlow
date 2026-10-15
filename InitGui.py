@@ -49,6 +49,11 @@ class MechFlowWorkbench(Gui.Workbench):
         step("pipe route rebuild", routing.install)
         from mechflow_gui import hole_wizard
         step("Up To Next holes follow the part", hole_wizard.install)
+        from mechflow_gui import title_block, sheet_tools
+        step("title block fit", title_block.install)
+        step("drawing mouse", sheet_tools.install)
+        from mechflow_gui import view_align
+        step("projected views keep their layout", view_align.install)
         step("selection highlight check", feature_highlight.restore_after_crash)
         step("quiet tree selection", feature_highlight.install)
         from mechflow_gui import sketch_status
@@ -97,7 +102,8 @@ class MechFlowWorkbench(Gui.Workbench):
                                      "MechFlow_SM_SaveDXF",
                                      "Separator", "MechFlow_MakeDrawing",
                                      "MechFlow_Standard3View", "MechFlow_SheetFormat",
-                                     "MechFlow_SavePDF",
+                                     "MechFlow_TitleBlock", "MechFlow_ClientSheet",
+                                     "MechFlow_TextBox", "MechFlow_SavePDF",
                                      "Separator", "MechFlow_EditMaterial",
                                      "MechFlow_MassProperties",
                                      "MechFlow_ToggleCommandManager",
@@ -174,6 +180,26 @@ class MechFlowWorkbench(Gui.Workbench):
                 items.append("MechFlow_EditMaterial")
             if any(getattr(i.Object, "RouteLine", "") for i in sel):
                 items.append("MechFlow_ChangePipeSize")
+            if any(i.Object.isDerivedFrom("Mesh::Feature") or i.Object.isDerivedFrom("Points::Feature")
+                   for i in sel):
+                items.append("MechFlow_PipeFromScan")
+            if any(hasattr(i.Object, "StdType") for i in sel):
+                items.append("MechFlow_SavePartAs")
+            if any(hasattr(i.Object, "ScanViewSettings") for i in sel):
+                items.append("MechFlow_ScanView")
+            if any(i.Object.TypeId == "TechDraw::DrawProjGroupItem" and
+                   str(i.Object.Type) != "Front" for i in sel):
+                items.append("MechFlow_BreakAlignment")
+            if any(hasattr(i.Object, "MechFlowAlignment") for i in sel):
+                items.append("MechFlow_DefaultAlignment")
+            if any(i.Object.TypeId in ("TechDraw::DrawProjGroup", "TechDraw::DrawProjGroupItem")
+                   for i in sel):
+                items.append("MechFlow_ViewSpacing")
+            if any(i.Object.TypeId == "TechDraw::DrawViewAnnotation" for i in sel):
+                items.append("MechFlow_TextBox")
+            if any(i.Object.TypeId in ("TechDraw::DrawPage", "TechDraw::DrawSVGTemplate")
+                   for i in sel):
+                items += ["MechFlow_TitleBlock", "MechFlow_ClientSheet"]
             if items:
                 self.appendContextMenu("", items + ["Separator"])
         except Exception:

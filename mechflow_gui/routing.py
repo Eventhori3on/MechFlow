@@ -463,6 +463,8 @@ def plan(route_like, starts=()):
                 trim_end[ka] = trim_start[kb] = 0.0
                 continue
             bend_deg = 180.0 - math.degrees(math.acos(max(-1.0, min(1.0, a.dot(b)))))
+            if abs(bend_deg - 90.0) < 0.01:
+                bend_deg = 90.0                  # square to within a whisker
             if bend_deg > 90.0 + 1e-6:
                 raise ValueError(f"a bend of {bend_deg:.1f}° is tighter than a 90° "
                                  "elbow - add a straight between two elbows")
@@ -472,7 +474,7 @@ def plan(route_like, starts=()):
             t90, t45 = ty["elbow90"], ty["elbow45"]
             use = t45 if (t45 and bend_deg <= 45.0 + 1e-6) else t90
             std_ang = 45.0 if use == t45 else 90.0
-            angle = 0.0 if abs(bend_deg - std_ang) < 1e-6 else bend_deg
+            angle = 0.0 if abs(bend_deg - std_ang) < 0.01 else bend_deg
             inlet = p + a * T
             parts.append({"type": use, "size": size, "rating": rpipe(size), "length": 0.0,
                           "angle": angle, "role": "elbow",
@@ -519,6 +521,10 @@ def plan(route_like, starts=()):
             continue
         od, wall, R, C, E = dims(size)
         mode = route_like["FreeEnds"]
+        for k_, m_ in (route_like.get("EndTypes") or {}).items():
+            xyz = [float(x) for x in k_.split(",")] if isinstance(k_, str) else list(k_)
+            if (V(*xyz) - p).Length < 1.0:
+                mode = m_
         tset = trim_start if at_start else trim_end
         if mode in ("Weld neck flange", "Blind flange"):
             H = stdparts._length_in_part(ty["flange"], size, frate)
@@ -552,6 +558,8 @@ def plan(route_like, starts=()):
 
         def pipe(s0, s1, size, who):
             ln = s1 - s0
+            if -0.5 < ln < 1.0:
+                return                   # the fittings meet: welded straight together
             if ln < 1.0:
                 if who is None:
                     raise ValueError(f"the straight from {_fmt(a)} to {_fmt(a + d * L)} is "
@@ -711,6 +719,35 @@ def ensure_props(o):
     if not hasattr(o, "SizeChanges"):
         o.addProperty("App::PropertyStringList", "SizeChanges", "Route",
                       "Size changes: 'line=size' - from that line on, downstream")
+    if not hasattr(o, "EndTypes"):
+        o.addProperty("App::PropertyStringList", "EndTypes", "Route",
+                      "How particular ends finish: 'x,y,z=Plain' (others: FreeEnds)")
+
+
+def end_types(o):
+    """{(x, y, z): end mode} - ends that finish differently from FreeEnds."""
+    out = {}
+    for t in getattr(o, "EndTypes", []) or []:
+        if "=" not in t:
+            continue
+        k, v = t.rsplit("=", 1)
+        try:
+            xyz = tuple(float(x) for x in k.split(","))
+        except ValueError:
+            continue
+        if len(xyz) == 3 and v.strip() in ENDS:
+            out[xyz] = v.strip()
+    return out
+
+
+def set_end_type(o, point, mode):
+    """The end at point finishes with mode (None: as FreeEnds)."""
+    ensure_props(o)
+    cur = {k: v for k, v in end_types(o).items()
+           if (V(*k) - V(point)).Length > 1.0}
+    if mode:
+        cur[(round(point.x, 3), round(point.y, 3), round(point.z, 3))] = mode
+    o.EndTypes = [f"{k[0]:g},{k[1]:g},{k[2]:g}={v}" for k, v in sorted(cur.items())]
 
 
 def size_changes(o):
@@ -771,7 +808,8 @@ def settings(o):
         by = {}
     return {"Standard": o.Standard, "Size": o.Size, "Schedule": o.Schedule,
             "Bend": o.Bend, "FreeEnds": o.FreeEnds, "FlangeRating": o.FlangeRating,
-            "ScheduleBySize": by, "SizeChanges": size_changes(o), "Material": o.Material}
+            "ScheduleBySize": by, "SizeChanges": size_changes(o), "Material": o.Material,
+            "EndTypes": {",".join(f"{x:g}" for x in k): v for k, v in end_types(o).items()}}
 
 
 def signature(o):

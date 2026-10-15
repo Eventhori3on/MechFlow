@@ -724,6 +724,52 @@ def register():
         "on downstream until the next change, with reducers where it steps",
         icon_path("ChangeSize.svg"), lambda: _run("routing", "change_pipe_size"),
         lambda: App.ActiveDocument is not None))
+    Gui.addCommand("MechFlow_ImportScan", _simple(
+        "Import Scan", "Bring in a 3D scan - OBJ, STL or PLY mesh, or an XYZ-type point "
+        "cloud, any size: the whole scan is kept for measuring, a lighter copy is shown",
+        icon_path("ImportScan.svg"), lambda: _run("scan_gui", "import_scan"), lambda: True))
+    Gui.addCommand("MechFlow_PipeFromScan", _simple(
+        "Pipe from Scan", "Click a pipe in a scan: MechFlow follows it through the elbows to "
+        "the flanges, measures it and makes it as a route in your pipe spec",
+        icon_path("PipeFromScan.svg"), lambda: _run("scan_gui", "pipe_from_scan"),
+        lambda: True))
+    Gui.addCommand("MechFlow_RemoveFromScan", _simple(
+        "Remove from Scan", "A copy of the scan with the pipe you modelled taken out, so the "
+        "new pipe sits in what's left of the scan (the original is kept)",
+        icon_path("RemoveFromScan.svg"), lambda: _run("scan_extras", "remove_command"),
+        lambda: App.ActiveDocument is not None))
+    Gui.addCommand("MechFlow_ScanView", _simple(
+        "Scan Reference View", "A picture of the scan with the new pipe in it on the drawing: "
+        "choose the view, the scan's colour and opacity; select it and run again to update",
+        icon_path("ScanView.svg"), lambda: _run("scan_extras", "reference_command"),
+        lambda: App.ActiveDocument is not None))
+    Gui.addCommand("MechFlow_SavePartAs", _simple(
+        "Save Part As", "Save the selected part(s) - a pipe, an elbow, a flange - on their own, "
+        "at their own origin, as a FreeCAD part or STEP",
+        icon_path("SavePartAs.svg"), lambda: _run("scan_extras", "save_part_command"),
+        lambda: App.ActiveDocument is not None))
+    for name, menu, tip, pix, mod, fn in (
+        ("TitleBlock", "Title Block", "Type in the title block and set each box's font and "
+         "size; long text is shrunk to fit its box; move a box's text onto the sheet to drag "
+         "it anywhere", "TitleBlock.svg", "title_block", "title_block_command"),
+        ("TextBox", "Text Box", "A note on the drawing: type it, pick the font and size, drag "
+         "it into place (Ctrl + mouse wheel sizes a selected one; double-click to change it)",
+         "TextBox.svg", "sheet_tools", "text_box_command"),
+        ("ClientSheet", "Client Sheet", "Use a client's border and title block (DXF, SVG, "
+         "picture or PDF) on the drawing, and keep it in your sheet formats",
+         "ClientSheet.svg", "client_sheet", "client_sheet_command"),
+        ("BreakAlignment", "Break Alignment", "The selected projected view stops lining up "
+         "with the front view: move it anywhere (Default Alignment puts it back)",
+         "BreakAlignment.svg", "view_align", "break_command"),
+        ("DefaultAlignment", "Default Alignment", "Put a view whose alignment was broken back "
+         "in line with its front view", "Standard3View.svg", "view_align", "default_command"),
+        ("ViewSpacing", "View Spacing", "The gap between the projected views - or drag a view: "
+         "it slides along its line from the front view", "ViewSpacing.svg", "view_align",
+         "spacing_command"),
+    ):
+        Gui.addCommand("MechFlow_" + name, _simple(
+            menu, tip, icon_path(pix), (lambda m=mod, f=fn: _run(m, f)),
+            lambda: App.ActiveDocument is not None))
     Gui.addCommand("MechFlow_PipeSpecs", _simple(
         "Pipe Specs", "Pipe specs routes follow: standard, material, schedule by size, "
         "elbows, flange rating, free ends - built-in ones and your own",

@@ -80,6 +80,26 @@ def _part_row(o):
     return name, desc
 
 
+def part_number(o):
+    """A part number given to the part (Save Part As), if any."""
+    for x in (o, getattr(o, "LinkedObject", None)):
+        if isinstance(x, tuple):
+            x = x[0]
+        pn = (getattr(x, "PartNumber", "") or "").strip() if x is not None else ""
+        if pn:
+            return pn
+    return ""
+
+
+def _numbered(o, name, desc):
+    """With a part number the number leads and what the part is moves to
+    the description."""
+    pn = part_number(o)
+    if not pn or pn == name:
+        return name, desc
+    return pn, (f"{name}, {desc}" if desc and name not in desc else (desc or name))
+
+
 def rows(asm):
     """[(part number, description, qty)] in tree order."""
     return rows_with_objects(asm)[0]
@@ -102,6 +122,7 @@ def rows_with_objects(asm):
         try:
             name, desc = (_fastener_row(o) if _is_fastener(o) else
                           _std_row(o) if _is_std(o) else _part_row(o))
+            name, desc = _numbered(o, name, desc)
         except Exception:
             continue
         n = 1
