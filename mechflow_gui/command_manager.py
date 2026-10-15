@@ -192,8 +192,9 @@ TABS = [
         ("Supplier\nPack", "MechFlow_SupplierPack"),
     ]),
     ("Routing", [
-        ("3D\nSketch", "MechFlow_Sketch3D"),
-        ("Route\nPipe", "MechFlow_RoutePipe"),
+        ("Draw\nPipe", "MechFlow_DrawPipe"),
+        ("stack", [("3D Sketch", "MechFlow_Sketch3D"),
+                   ("Route Pipe", "MechFlow_RoutePipe")]),
         ("Valves &\nInstruments", "MechFlow_Valves"),
         ("Author\nComponent", "MechFlow_AuthorComponent"),
         ("stack", [("Pipe Specs", "MechFlow_PipeSpecs"),

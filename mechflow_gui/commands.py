@@ -705,6 +705,13 @@ def register():
         "(sizes, lengths, suppressed features): add, switch and edit them",
         icon_path("Configurations.svg"), lambda: _run("configurations", "show"),
         lambda: App.ActiveDocument is not None))
+    Gui.addCommand("MechFlow_DrawPipe", _simple(
+        "Draw Pipe", "Draw a pipe and see it built as you click: pick the spec and size, start "
+        "on a nozzle, flange, open pipe end or part way along a pipe (a tee goes in), click "
+        "the corners - or Route to... a target and Tab through the square ways round. Click a "
+        "straight to drag it across or type its length. With a route selected it changes "
+        "that route", icon_path("DrawPipe.svg"), lambda: _run("pipe_draw", "draw_pipe"),
+        lambda: True))
     Gui.addCommand("MechFlow_Sketch3D", _simple(
         "3D Sketch", "Lines straight in 3D space for a pipe route: click in the view, lines "
         "run along X, Y or Z (Tab changes plane), start or end on flange and nozzle edges, "

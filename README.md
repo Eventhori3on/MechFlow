@@ -205,6 +205,17 @@ Each feature has its own panel, and you edit it again by double-clicking.
 - **Bill of Materials** with ITEM NO. / PART NUMBER / DESCRIPTION / QTY.,
   counting identical parts and fasteners together.
 - **Routing tab (Tube and Pipe style):**
+  - **Draw Pipe:** the quickest way in. Pick the pipe spec and size, then
+    draw - the real pipe, elbows, tees and flanges appear as each line goes
+    in, and a leg too short for its elbows is flagged straight away. Start
+    on a nozzle or flange face, a tee's branch end, or another route's open
+    end (you carry on drawing that route, welded on); click part way along
+    a pipe to branch off it and a tee goes in. **Route to... (R)**: click
+    where the pipe has to go and MechFlow offers the square ways round -
+    Tab for the next, click to take it. **Click a straight** for its grips:
+    drag it across (the pipes either side stretch) or type its length. OK
+    builds the route (the 3D Sketch is made for you behind the scenes).
+    Select a route and click Draw Pipe to change it the same way.
   - **3D Sketch:** draw a pipe run straight in 3D space, renamable in the tree
     like any feature. Click a nozzle flange to start on it (the point snaps to
     the flange centre), then click along; lines lock to X, Y or Z and round to

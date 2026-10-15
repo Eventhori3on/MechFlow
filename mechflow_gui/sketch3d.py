@@ -344,6 +344,71 @@ class Editor:
         for i in self._downstream(a, b):
             self.pts[i] = self.pts[i] + shift
 
+    # -- pipe editing (Draw Pipe)
+    def lines_at(self, i):
+        return [k for k, (a, b) in enumerate(self.lines) if i in (a, b)]
+
+    def is_anchored(self, i):
+        return i in self.anchor_pts
+
+    def is_free_end(self, i):
+        return len(self.lines_at(i)) == 1 and not self.is_anchored(i)
+
+    def split_line(self, k, p):
+        """A point on line k at p (a branch can start there); the line becomes
+        two. Returns the point's number."""
+        a, b = self.lines[k]
+        A, B = self.pts[a], self.pts[b]
+        if (p - A).Length < 1.0:
+            return a
+        if (p - B).Length < 1.0:
+            return b
+        i = self.add_point(p)
+        self.lines[k] = (a, i)
+        self.lines.append((i, b))
+        return i
+
+    def drag_axes(self, k):
+        """Axes line k can be dragged along (keeping every line straight in
+        X, Y or Z): across the line, where the lines at both its ends run
+        that way (they stretch) or there are none - and its ends aren't held
+        on a flange."""
+        a, b = self.lines[k]
+        d = self.pts[b] - self.pts[a]
+        if d.Length < TOL:
+            return []
+        u = V(d)
+        u.normalize()
+        out = []
+        for name in ("+X", "+Y", "+Z"):
+            ax = AXES[name]
+            if abs(u.dot(ax)) > 1e-6:
+                continue
+            ok = True
+            for i in (a, b):
+                if self.is_anchored(i):
+                    ok = False
+                    break
+                for j in self.lines_at(i):
+                    if j == k:
+                        continue
+                    x, y = self.lines[j]
+                    e = self.pts[y] - self.pts[x]
+                    if e.Length > TOL and abs(abs(e.dot(ax)) / e.Length - 1) > 1e-6:
+                        ok = False
+                        break
+                if not ok:
+                    break
+            if ok:
+                out.append(name)
+        return out
+
+    def move_line(self, k, v):
+        """Line k moved by v (the lines at its ends stretch)."""
+        a, b = self.lines[k]
+        self.pts[a] = self.pts[a] + v
+        self.pts[b] = self.pts[b] + v
+
     def delete_line(self, k):
         a, b = self.lines.pop(k)
         self._drop_lonely()
@@ -803,7 +868,7 @@ class Sketch3DPanel:
     def _pick(self, pos):
         """What's under the mouse: (global point, anchor, sketch point idx)."""
         try:
-            info = self.view.getObjectInfo((int(pos[0]), int(pos[1])))
+            info = self._info_at(pos)
         except Exception:
             info = None
         if not info:
@@ -830,6 +895,9 @@ class Sketch3DPanel:
             if f is not None:
                 return f[0], (None if self._own_component(obj) else (obj, s)), None
         return None
+
+    def _info_at(self, pos):
+        return self.view.getObjectInfo((int(pos[0]), int(pos[1])))
 
     def _own_component(self, obj):
         """A valve or tee on a route drawn with this sketch: snap to its end

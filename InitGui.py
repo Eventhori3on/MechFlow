@@ -183,6 +183,7 @@ class MechFlowWorkbench(Gui.Workbench):
             if any(getattr(i.Object, "MechFlowRoute", "") or
                    type(getattr(i.Object, "Proxy", None)).__name__ in
                    ("PipeRoute", "InlineComponent", "Sketch3D") for i in sel):
+                items.append("MechFlow_DrawPipe")
                 items.append("MechFlow_Sketch3D")
             if any(i.Object.isDerivedFrom("Mesh::Feature") or i.Object.isDerivedFrom("Points::Feature")
                    for i in sel):
