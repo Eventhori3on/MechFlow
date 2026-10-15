@@ -457,6 +457,8 @@ class Sketch3DPanel:
         self._scene = None
         self._cbs = []
         self._labels = []
+        self._faded = []
+        self._fade_routes()
         self._install()
         self._refresh()
         # if the panel goes without OK / Cancel (its document closed...),
@@ -465,6 +467,58 @@ class Sketch3DPanel:
         self._watch.setInterval(500)
         self._watch.timeout.connect(self._check_alive)
         self._watch.start()
+
+    def routes(self):
+        try:
+            from mechflow_gui import routing
+            return [r for r in self.doc.Objects if routing.is_route(r)
+                    and self.sketch in list(getattr(r, "PathSketches", []) or [])]
+        except Exception:
+            return []
+
+    def _fade_routes(self):
+        """See (and click) the lines inside the pipe: the route's parts go
+        see-through and can't be picked while its sketch is edited."""
+        try:
+            from mechflow_gui import inline
+        except Exception:
+            inline = None
+        objs = []
+        for r in self.routes():
+            objs += list(r.Parts)
+            if inline is not None:
+                objs += inline.components_of(r)
+        for o in objs:
+            vo = getattr(o, "ViewObject", None)
+            if vo is None:
+                continue
+            try:
+                self._faded.append((o, vo.Transparency, vo.Selectable))
+                vo.Transparency = 80
+                vo.Selectable = False
+            except Exception:
+                pass
+        try:
+            if self.routes():
+                self._sketch_vis = self.sketch.ViewObject.Visibility
+                self.sketch.ViewObject.Visibility = True
+        except Exception:
+            pass
+
+    def _unfade(self):
+        for o, t, sel in self._faded:
+            try:
+                o.ViewObject.Transparency = t
+                o.ViewObject.Selectable = sel
+            except Exception:
+                pass
+        self._faded = []
+        try:
+            if hasattr(self, "_sketch_vis"):
+                self.sketch.ViewObject.Visibility = self._sketch_vis
+                del self._sketch_vis
+        except Exception:
+            pass
 
     def _check_alive(self):
         from mechflow_gui import widget_alive
@@ -691,6 +745,10 @@ class Sketch3DPanel:
             self._watch.stop()
         except Exception:
             pass
+        try:
+            self._unfade()
+        except Exception:
+            pass
         for t, cb in self._cbs:
             try:
                 self.view.removeEventCallbackPivy(t, cb)
@@ -770,8 +828,20 @@ class Sketch3DPanel:
                 continue
             f = circle_frame(obj, s)
             if f is not None:
-                return f[0], (obj, s), None
+                return f[0], (None if self._own_component(obj) else (obj, s)), None
         return None
+
+    def _own_component(self, obj):
+        """A valve or tee on a route drawn with this sketch: snap to its end
+        but don't tie the point to it (the route places the part, so the
+        part can't also place the route). A branch off a tee is its own
+        route: a new 3D Sketch from the tee's branch end."""
+        try:
+            from mechflow_gui import inline
+            r = getattr(obj, "Route", None) if inline.is_component(obj) else None
+            return r is not None and self.sketch in list(getattr(r, "PathSketches", []) or [])
+        except Exception:
+            return False
 
     def _ray_point(self, pos):
         """The mouse on the drawing plane through the current point."""
@@ -911,15 +981,40 @@ class Sketch3DPanel:
 
 
 def sketch_3d():
-    """3D Sketch command: a new one, or edit the selected one."""
+    """3D Sketch command: edit the selected 3D sketch - or the one the
+    selected route, pipe, fitting or valve is drawn with - else a new one."""
     if App.ActiveDocument is None:
         App.newDocument()
     if Gui.Control.activeDialog():
         QtWidgets.QMessageBox.information(Gui.getMainWindow(), "3D Sketch",
                                           "Finish the open dialog first.")
         return None
-    sel = [s for s in Gui.Selection.getSelection() if is_sketch3d(s)]
+    sk = None
+    for o in Gui.Selection.getSelection():
+        if is_sketch3d(o):
+            sk = o
+            break
+        try:
+            from mechflow_gui import routing
+            r = routing.route_of(o)
+            if r is not None:
+                sk = routing.route_sketch(r)
+                break
+        except Exception:
+            pass
     Gui.Selection.clearSelection()
-    p = Sketch3DPanel(sel[0] if sel else None)
+    if sk is not None and not is_sketch3d(sk):
+        try:                                   # a 2D sketch: FreeCAD's own editor
+            Gui.ActiveDocument.setEdit(sk.Name)
+        except Exception:
+            pass
+        return None
+    return edit_sketch(sk)
+
+
+def edit_sketch(sk=None):
+    if Gui.Control.activeDialog():
+        return None
+    p = Sketch3DPanel(sk)
     Gui.Control.showDialog(p)
     return p

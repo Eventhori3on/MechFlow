@@ -806,10 +806,33 @@ def settings(o):
         by = json.loads(o.ScheduleBySize or "{}")
     except Exception:
         by = {}
+    ends = component_port_ends(o)
+    ends.update(end_types(o))               # what was set by hand wins
     return {"Standard": o.Standard, "Size": o.Size, "Schedule": o.Schedule,
             "Bend": o.Bend, "FreeEnds": o.FreeEnds, "FlangeRating": o.FlangeRating,
             "ScheduleBySize": by, "SizeChanges": size_changes(o), "Material": o.Material,
-            "EndTypes": {",".join(f"{x:g}" for x in k): v for k, v in end_types(o).items()}}
+            "EndTypes": {",".join(f"{x:g}" for x in k): v for k, v in ends.items()}}
+
+
+def component_port_ends(o):
+    """{(x, y, z): end mode} for route ends drawn from a component's port
+    (a tee's branch): a weld port takes the pipe as it is, a flanged port
+    gets a flange to meet it - not the route's usual free-end finish."""
+    out = {}
+    try:
+        from mechflow_gui import inline, sketch3d
+    except Exception:
+        return out
+    for sk in getattr(o, "PathSketches", []) or []:
+        if not sketch3d.is_sketch3d(sk):
+            continue
+        pts = list(sk.Points)
+        for (x, _subs), i in zip(sk.Anchors, sk.AnchorPoints):
+            if i < len(pts) and inline.is_component(x):
+                p = pts[i]
+                mode = "Weld neck flange" if x.EndType in ("flanged", "wafer") else "Plain"
+                out[(round(p.x, 3), round(p.y, 3), round(p.z, 3))] = mode
+    return out
 
 
 def signature(o):
@@ -1190,9 +1213,16 @@ class RoutePanel:
         self.list.setMaximumHeight(110)
         lay.addWidget(QtWidgets.QLabel("<b>Path and start flanges</b>"))
         lay.addWidget(self.list)
+        brow = QtWidgets.QHBoxLayout()
         clr = QtWidgets.QPushButton("Clear")
         clr.clicked.connect(self._clear)
-        lay.addWidget(clr)
+        brow.addWidget(clr)
+        self.edit_sk = QtWidgets.QPushButton("Edit the 3D Sketch")
+        self.edit_sk.setToolTip("Change the route's lines: OK here first, then the 3D Sketch "
+                                "opens; the pipe rebuilds when you finish it")
+        self.edit_sk.clicked.connect(self._edit_sketch)
+        brow.addWidget(self.edit_sk)
+        lay.addLayout(brow)
         lay.addWidget(QtWidgets.QLabel("<b>Size changes</b> (right-click a pipe: Change Pipe Size)"))
         self.changes = QtWidgets.QListWidget()
         self.changes.setMaximumHeight(80)
@@ -1519,6 +1549,23 @@ class RoutePanel:
                          f"{'s' if len(elbows) != 1 else ''}</b>{extra}, {len(parts)} parts in all. "
                          "Click more lines or flanges, or OK.")
 
+    def _edit_sketch(self):
+        """Keep what's set here, then open the route's 3D Sketch."""
+        from mechflow_gui import sketch3d
+        sk = route_sketch(self.route) if self.route is not None else None
+        if sk is None:
+            sk = next((x for x in self.links if sketch3d.is_sketch3d(x)), None)
+        if sk is None:
+            self.error.setText("This route isn't drawn with a 3D Sketch - edit its sketch "
+                               "the usual way (double-click it in the tree).")
+            self.error.show()
+            return
+        if self.route is not None and self.route.Parts:
+            self.accept()
+        else:
+            self.reject()
+        QtCore.QTimer.singleShot(0, lambda: sketch3d.edit_sketch(sk))
+
     def accept(self):
         self._timer.stop()
         if self.route is None or not self.route.Parts:
@@ -1541,6 +1588,36 @@ class RoutePanel:
         self.doc.recompute()
         Gui.Control.closeDialog()
         return True
+
+
+def route_of(o):
+    """The route an object belongs to: the route itself, one of its parts,
+    a valve / tee on it."""
+    if o is None:
+        return None
+    if is_route(o):
+        return o
+    name = getattr(o, "MechFlowRoute", "")
+    if name:
+        r = o.Document.getObject(name)
+        if r is not None and is_route(r):
+            return r
+    r = getattr(o, "Route", None)
+    if r is not None and is_route(r):
+        return r
+    for x in getattr(o, "InList", []):
+        if is_route(x):
+            return x
+    return None
+
+
+def route_sketch(route):
+    """The sketch a route is drawn with (its first one)."""
+    if route is None:
+        return None
+    links = [x for x, _s in path_links(route)]
+    from mechflow_gui import sketch3d
+    return next((x for x in links if sketch3d.is_sketch3d(x)), links[0] if links else None)
 
 
 def route_pipe():

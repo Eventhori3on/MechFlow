@@ -1,7 +1,11 @@
 import os, sys; sys.path.insert(0, os.environ.get("MF_TESTDIR", os.getcwd()))
 # Author Component: a valve-like part, turned and moved anyhow in its own
 # file, and a sensor, made into routing library parts by clicking their
-# port edges; then placed on a route like the built-in ones.
+# port edges; then placed on a route like the built-in ones. An equal tee
+# authored on its three ends (in any order) sits in the line on its run with
+# the branch turning round the pipe; two ends that aren't in line are
+# refused; a branch route drawn from the tee's branch end has a plain end
+# there. Editing the route's 3D sketch from a selected pipe.
 from h import *
 import Part, math, shutil
 V = App.Vector
@@ -149,4 +153,130 @@ def place():
     Gui.SendMsgToActiveView("ViewFit")
 at(place, 1000)
 at(lambda: shot("authored"), 800)
+
+
+def author_tee():
+    """An 88.9 x 3.2 equal tee (butt weld), modelled turned anyhow."""
+    from mechflow_gui import inline
+    d = App.newDocument("Tee")
+    R, r = 44.45, 41.25
+    run_ = Part.makeCylinder(R, 2 * 76, V(-76, 0, 0), V(1, 0, 0))
+    br = Part.makeCylinder(R, 76, V(0, 0, 0), V(0, 1, 0))
+    body = run_.fuse(br).cut(Part.makeCylinder(r, 2 * 76, V(-76, 0, 0), V(1, 0, 0))) \
+        .cut(Part.makeCylinder(r, 76, V(0, 0, 0), V(0, 1, 0))).removeSplitter()
+    o = d.addObject("Part::Feature", "EqualTee")
+    o.Shape = body
+    o.Placement = App.Placement(V(30, 60, 90), App.Rotation(V(1, 2, 3), 50))
+    d.recompute()
+    rot = o.Placement.Rotation
+    ends = {}
+    for i, e in enumerate(o.Shape.Edges):
+        c = getattr(e, "Curve", None)
+        if type(c).__name__ != "Circle" or abs(c.Radius - R) > 1e-6:
+            continue
+        loc = o.Placement.inverse().multVec(c.Center)
+        for key, want in (("A", V(-76, 0, 0)), ("B", V(76, 0, 0)), ("C", V(0, 76, 0))):
+            if (loc - want).Length < 1e-6:
+                ends[key] = f"Edge{i+1}"
+    log("tee ends", ends)
+    # two ends that aren't in line (a run end and the branch): refused
+    p = inline.author_component()
+    assert p.add_port(o, ends["A"]) and p.add_port(o, ends["C"])
+    log("run end + branch only:", p.msg.text().rsplit("<br><br>", 1)[-1])
+    assert not p.accept() and not p.error.isHidden()
+    log("  refused:", p.error.text()[:90])
+    # all three, branch picked first
+    p._clear()
+    assert p.add_port(o, ends["C"]) and p.add_port(o, ends["A"]) and p.add_port(o, ends["B"])
+    log("three ends:", p.msg.text().rsplit("<br><br>", 1)[-1])
+    p.name.setText("Equal tee DN80")
+    p.cat.setCurrentText("Fitting")
+    p.end.setCurrentIndex(1)                  # butt weld
+    assert p.accept()
+    info = [i for n, _p, i in inline.library_items() if n == "Equal tee DN80"][0]
+    log("tee ports", [(q["name"], [round(x, 1) for x in q["point"]], [round(x, 2) for x in q["dir"]],
+                       q.get("angle")) for q in info["ports"]], "ftf", round(info["ftf"], 1))
+    assert len(info["ports"]) == 3 and abs(info["ftf"] - 152) < 0.01
+    c = info["ports"][2]
+    assert abs(c["point"][1] - 76) < 0.01 and abs(c["dir"][1] - 1) < 1e-6 and abs(c["angle"] - 90) < 0.01
+    S["tee_lib"] = [p_ for n, p_, _i in inline.library_items() if n == "Equal tee DN80"][0]
+at(author_tee, 1000)
+
+
+def place_tee():
+    from mechflow_gui import inline, routing
+    App.setActiveDocument(S["doc"].Name)
+    p = inline.valves_and_instruments()
+    face = S["face"]
+    tee = p.place_at(S["r"], face + V(350, 0, 0), library=S["tee_lib"])
+    assert not p.error.isVisible(), p.error.text()
+    S["doc"].recompute()
+    rot = tee.Placement.Rotation
+    run_dir = rot.multVec(V(0, 0, 1))
+    branch = rot.multVec(V(0, 1, 0))
+    log("tee on the line: run along", tuple(round(x, 3) for x in run_dir), "branch",
+        tuple(round(x, 3) for x in branch), "|", p.msg.text()[-120:])
+    assert abs(abs(run_dir.x) - 1) < 1e-6 and abs(branch.z - 1) < 1e-6
+    tee.Angle = 90
+    routing.build(S["r"])
+    S["doc"].recompute()
+    b2 = tee.Placement.Rotation.multVec(V(0, 1, 0))
+    log("turned 90: branch", tuple(round(x, 3) for x in b2))
+    assert abs(b2.z) < 1e-6 and abs(abs(b2.y) - 1) < 1e-6
+    tee.Angle = 0
+    routing.build(S["r"])
+    S["doc"].recompute()
+    over = [o.Label for o in S["r"].Parts if getattr(o, "StdType", "").endswith("PIPE")
+            and o.Shape.common(tee.Shape).Volume > 1]
+    log("pipes overlapping the tee", over)
+    assert not over
+    p.accept()
+    S["tee"] = tee
+at(place_tee, 1500)
+
+
+def branch_route():
+    """A branch pipe from the tee's branch end: its own route; that end is plain."""
+    from mechflow_gui import sketch3d, routing
+    tee = S["tee"]
+    edge = None
+    top = tee.Placement.multVec(V(0, 76, 0))
+    for i, e in enumerate(tee.Shape.Edges):
+        c = getattr(e, "Curve", None)
+        if type(c).__name__ == "Circle" and (c.Center - top).Length < 1e-3 and c.Radius > 43:
+            edge = f"Edge{i+1}"
+    sk = sketch3d.make(None, "Branch")
+    ed = sketch3d.Editor(sk)
+    ed.start(top, (tee, edge))
+    ed.line_along(V(0, 0, 1), 500)
+    ed.save()
+    S["doc"].recompute()
+    r2 = routing.make_route(None, [(sk, None)], "EN", "DN80", "", "3D", "Weld neck flange", "PN16")
+    S["doc"].recompute()
+    ends = routing.component_port_ends(r2)
+    near = [o.Label for o in r2.Parts if (o.Shape.BoundBox.Center - top).Length < 60
+            and "1092" in getattr(o, "StdType", "")]
+    pipes = [round(float(o.Length)) for o in r2.Parts if getattr(o, "StdType", "").endswith("PIPE")]
+    log("branch route:", r2.Error or "ok", "| ends from the tee", ends, "| flanges at the tee",
+        near, "| pipes", pipes)
+    assert not r2.Error and list(ends.values()) == ["Plain"] and not near
+    S["r2"] = r2
+at(branch_route, 1500)
+
+
+def edit_route_sketch():
+    from mechflow_gui import sketch3d
+    pipe = [o for o in S["r"].Parts if getattr(o, "StdType", "").endswith("PIPE")][0]
+    Gui.Selection.clearSelection()
+    Gui.Selection.addSelection(pipe)
+    p = sketch3d.sketch_3d()
+    faded = [(o.ViewObject.Transparency, o.ViewObject.Selectable) for o in S["r"].Parts[:3]]
+    log("3D Sketch with a pipe selected edits", p.sketch.Label, "| route parts while editing",
+        faded, "| sketch shown", p.sketch.ViewObject.Visibility)
+    assert p.sketch is S["r"].PathSketches[0] and faded[0] == (80, False)
+    p.reject()
+    back = [(o.ViewObject.Transparency, o.ViewObject.Selectable) for o in S["r"].Parts[:3]]
+    log("after Cancel", back)
+    assert back[0][1] is True and back[0][0] != 80
+at(edit_route_sketch, 800)
 run()

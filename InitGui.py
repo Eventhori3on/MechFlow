@@ -180,6 +180,10 @@ class MechFlowWorkbench(Gui.Workbench):
                 items.append("MechFlow_EditMaterial")
             if any(getattr(i.Object, "RouteLine", "") for i in sel):
                 items.append("MechFlow_ChangePipeSize")
+            if any(getattr(i.Object, "MechFlowRoute", "") or
+                   type(getattr(i.Object, "Proxy", None)).__name__ in
+                   ("PipeRoute", "InlineComponent", "Sketch3D") for i in sel):
+                items.append("MechFlow_Sketch3D")
             if any(i.Object.isDerivedFrom("Mesh::Feature") or i.Object.isDerivedFrom("Points::Feature")
                    for i in sel):
                 items.append("MechFlow_PipeFromScan")

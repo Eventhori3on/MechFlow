@@ -293,7 +293,7 @@ def component_shape(o):
     if o.Kind == "Library part":
         sh = o.LibraryShape
         ports = json.loads(o.Ports or "[]")
-        if len(ports) == 2:
+        if len(ports) >= 2:                  # (a tee's branch is the third port)
             L = abs(ports[1]["point"][2] - ports[0]["point"][2])
             return sh.copy(), L, ports[0].get("end", "flanged")
         return sh.copy(), 0.0, "branch"
@@ -308,7 +308,7 @@ def ftf_and_end(comp, standard, size):
     """(face-to-face, end type) without building the shape."""
     if comp.Kind == "Library part":
         ports = json.loads(comp.Ports or "[]")
-        if len(ports) == 2:
+        if len(ports) >= 2:
             return abs(ports[1]["point"][2] - ports[0]["point"][2]), ports[0].get("end", "flanged")
         return 0.0, "branch"
     if comp.Kind in BRANCH:
@@ -362,6 +362,7 @@ def port_sizes(comp, standard, rating):
         ports = json.loads(comp.Ports or "[]")
     except Exception:
         return None
+    ports = ports[:2]                       # the run (a tee's branch can differ)
     if len(ports) != 2 or not all(p.get("dia") for p in ports):
         return None
     sizes = [nominal_size(standard, rating, float(p["dia"]), p.get("end", "flanged")) for p in ports]
@@ -563,9 +564,17 @@ class InlinePanel:
             self.msg.setText("<b>Pick a valve or instrument, then click a route's pipe</b> "
                              "where it goes. It sizes itself to the pipe.")
         else:
+            tee = ""
+            try:
+                if len(json.loads(self.comp.Ports or "[]")) == 3:
+                    tee = (" The branch points the way the ring is turned (0° straight up, "
+                           "90° / 180° / 270° round the pipe); start a 3D Sketch line from "
+                           "its end to run a branch pipe off it.")
+            except Exception:
+                pass
             self.msg.setText(f"<b>{self.comp.Label}</b>: drag the ring to turn it round the "
                              "pipe and the arrow to slide it along (or type below). Click "
-                             "another pipe to add another.")
+                             f"another pipe to add another.{tee}")
 
     def _load(self, c):
         self.angle.blockSignals(True)
@@ -892,17 +901,84 @@ def valves_and_instruments():
 
 # ------------------------------------------------------------ Author Component
 
+def _in_line(c1, a1, c2, a2):
+    """How far two port frames are from facing each other on one axis
+    (0: on one line; ~2: square to it)."""
+    d = c2 - c1
+    if d.Length < 1e-6:
+        return 9.0
+    d = V(d)
+    d.normalize()
+    a1, a2 = V(a1), V(a2)
+    a1.normalize()
+    a2.normalize()
+    return (1 - abs(a1.dot(d))) + (1 - abs(a2.dot(d)))
+
+
+def run_and_branch(ports):
+    """For three port frames [(centre, axis)]: (run i, run j, branch k) - the
+    two ends on one axis are the run, whichever order they were picked in."""
+    import itertools
+    best = None
+    for i, j in itertools.combinations(range(3), 2):
+        score = _in_line(ports[i][0], ports[i][1], ports[j][0], ports[j][1])
+        if best is None or score < best[0]:
+            best = (score, i, j)
+    score, i, j = best
+    if score > 0.03:
+        raise ValueError("no two of the three ends are on one axis - pick the two run ends "
+                         "(in line) and the branch end")
+    k = ({0, 1, 2} - {i, j}).pop()
+    return i, j, k
+
+
 def normalise(shape, ports):
     """Shape and ports in a library item's own axes, from picked port
     frames [(centre, axis)] in the model: two ports - pipe axis Z through
-    both, centre at the origin, up (+Y) towards the model's +Z; one port -
-    mounting face at the origin, standing out along +Z."""
+    both, centre at the origin, up (+Y) towards the model's +Z; three (a
+    tee or Y piece) - the same along the run, with the branch pointing up
+    (+Y), so turning the part round the pipe swings the branch round; one
+    port - mounting face at the origin, standing out along +Z."""
+    if len(ports) == 3:
+        i, j, k = run_and_branch(ports)
+        (c1, _a1), (c2, _a2), (c3, a3) = ports[i], ports[j], ports[k]
+        d = c2 - c1
+        L = d.Length
+        d.normalize()
+        m = (c1 + c2) * 0.5
+        out = c3 - m
+        up = out - d * out.dot(d)
+        if up.Length < 1e-6:                 # (branch centre on the run axis?)
+            a = V(a3)
+            up = a - d * a.dot(d)
+        if up.Length < 1e-6:
+            raise ValueError("the branch end is in line with the run")
+        up.normalize()
+        x = up.cross(d)
+        frame = App.Placement(m, App.Rotation(x, up, d, "ZYX"))
+        inv = frame.inverse()
+        local = shape.copy()
+        local.transformShape(inv.toMatrix())
+        bc = inv.multVec(c3)
+        ba = inv.Rotation.multVec(V(a3))
+        if ba.dot(bc) < 0:                   # pointing out of the part
+            ba = ba * -1
+        ba.normalize()
+        ang = math.degrees(math.acos(max(-1.0, min(1.0, abs(ba.z)))))
+        return local, [{"name": "A", "point": [0, 0, -L / 2], "dir": [0, 0, -1]},
+                       {"name": "B", "point": [0, 0, L / 2], "dir": [0, 0, 1]},
+                       {"name": "C", "point": [bc.x, bc.y, bc.z], "dir": [ba.x, ba.y, ba.z],
+                        "angle": round(ang, 2)}]          # branch to run: 90 a tee, 45 a Y
     if len(ports) == 2:
-        (c1, _a1), (c2, _a2) = ports
+        (c1, a1), (c2, a2) = ports
         d = c2 - c1
         L = d.Length
         if L < 1e-6:
             raise ValueError("the two ports are in the same place")
+        if _in_line(c1, a1, c2, a2) > 0.03:
+            raise ValueError("the two ends aren't on one axis, so the part would sit "
+                             "crooked in the pipe. For a tee or Y piece pick all three ends "
+                             "(the two run ends and the branch)")
         d.normalize()
         up = V(0, 0, 1) - d * d.z
         if up.Length < 1e-6:
@@ -931,7 +1007,7 @@ def normalise(shape, ports):
         local = shape.copy()
         local.transformShape(frame.inverse().toMatrix())
         return local, [{"name": "A", "point": [0, 0, 0], "dir": [0, 0, -1]}]
-    raise ValueError("pick one port (an instrument) or two (an inline part)")
+    raise ValueError("pick one port (an instrument), two (an inline part) or three (a tee)")
 
 
 def save_library_item(name, shape, ports, end="flanged", category="Valve", port_dia=None):
@@ -939,16 +1015,19 @@ def save_library_item(name, shape, ports, end="flanged", category="Valve", port_
     import re
     d = library_dir()
     safe = re.sub(r'[<>:"/\\|?*]+', "-", name).strip(" .") or "Component"
+    if len(ports) == 3 and isinstance(port_dia, (list, tuple)):
+        i, j, k = run_and_branch(ports)      # (diameters in run, run, branch order)
+        port_dia = [port_dia[i], port_dia[j], port_dia[k]]
     local, pts = normalise(shape, ports)
     dias = port_dia if isinstance(port_dia, (list, tuple)) else [port_dia] * len(pts)
     for p, dia in zip(pts, dias):
-        p["end"] = end if len(pts) == 2 else "branch"
+        p["end"] = end if len(pts) >= 2 else "branch"
         if dia:
             p["dia"] = round(dia, 2)
     brep = safe + ".brep"
     local.exportBrep(os.path.join(d, brep))
     info = {"name": name, "category": category, "ports": pts, "brep": brep,
-            "ftf": abs(pts[1]["point"][2] - pts[0]["point"][2]) if len(pts) == 2 else 0.0}
+            "ftf": abs(pts[1]["point"][2] - pts[0]["point"][2]) if len(pts) >= 2 else 0.0}
     path = os.path.join(d, safe + ".json")
     json.dump(info, open(path, "w", encoding="utf-8"), indent=1)
     return path
@@ -1005,14 +1084,31 @@ class AuthorPanel:
         n = len(self.ports)
         self.msg.setText(
             "<b>Click the port edges</b> of the part: for a valve or other inline part the "
-            "two round edges where the pipe joins (flange faces or pipe ends), for an "
-            "instrument the one round edge it mounts on. Then name it and press OK to put it "
-            f"in the routing library.<br><br>Ports picked: <b>{n}</b>")
+            "two round edges where the pipe joins (flange faces or pipe ends); for a "
+            "<b>tee or Y piece</b> all three ends (it goes in the line on its two in-line "
+            "ends and the branch turns round the pipe); for an instrument the one round "
+            "edge it mounts on. Then name it and press OK to put it in the routing library."
+            f"<br><br>Ports picked: <b>{n}</b>{self._which()}")
         self.list.clear()
         for k, (o, s, c, a, dia) in enumerate(self.ports):
-            self.list.addItem(f"Port {'AB'[k] if k < 2 else k + 1}: {o.Label} {s.rsplit('.', 1)[-1]} "
+            self.list.addItem(f"Port {'ABC'[k] if k < 3 else k + 1}: {o.Label} {s.rsplit('.', 1)[-1]} "
                               f"(Ø{dia:.1f})")
         self.end.setEnabled(n != 1)
+
+    def _which(self):
+        if len(self.ports) == 3:
+            try:
+                i, j, k = run_and_branch([(c, a) for _o, _s, c, a, _d in self.ports])
+                return (f" - in line: ports {'ABC'[i]} and {'ABC'[j]}, "
+                        f"branch: port {'ABC'[k]}")
+            except ValueError as e:
+                return f" - <span style='color:#b00020'>{e}</span>"
+        if len(self.ports) == 2:
+            (_o, _s, c1, a1, _d), (_o2, _s2, c2, a2, _d2) = self.ports
+            if _in_line(c1, a1, c2, a2) > 0.03:
+                return (" - <span style='color:#b00020'>these two aren't in line: for a tee "
+                        "pick the third end too</span>")
+        return ""
 
     def _clear(self):
         self.ports = []
@@ -1040,8 +1136,8 @@ class AuthorPanel:
             self.error.setText("Pick round edges (a flange face or pipe end).")
             self.error.show()
             return False
-        if len(self.ports) >= 2:
-            self.error.setText("Two ports at most - Clear ports to start again.")
+        if len(self.ports) >= 3:
+            self.error.setText("Three ports at most (a tee) - Clear ports to start again.")
             self.error.show()
             return False
         self.error.hide()

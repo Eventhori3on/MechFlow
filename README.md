@@ -210,7 +210,11 @@ Each feature has its own panel, and you edit it again by double-clicking.
     the flange centre), then click along; lines lock to X, Y or Z and round to
     10 mm, Tab changes the plane, or type a direction and length. Edit any
     line's length or direction in the table and the lines after it follow.
-    Click a corner to start a branch.
+    Click a corner to start a branch. **To change a route's lines**, select
+    any of its pipes or fittings (or the route) and click 3D Sketch, or
+    right-click a pipe, or Edit the 3D Sketch in the route's panel: the pipe
+    goes see-through while you edit so the lines inside it can be clicked,
+    and it rebuilds when you press OK.
   - **Route Pipe:** select the 3D Sketch (or ordinary sketches) and MechFlow
     fills it in: pipe cut to length, elbows at the bends (EN 10253 2D/3D/5D or
     ASME LR; cut elbows for other angles), equal tees at branches, a gasket,
@@ -235,9 +239,14 @@ Each feature has its own panel, and you edit it again by double-clicking.
     DN80 control valve, say) changes the size after it, and the route
     checks it's the right way round.
   - **Author Component:** open your own valve, strainer or sensor model,
-    click its port edges (two for an inline part, one for a branch part),
-    name it and OK: it joins the Valves & Instruments list and places, turns
-    and bolts up like the built-in ones.
+    click its port edges (two for an inline part, one for a branch part,
+    **three for a tee or Y piece** - any order, the two in-line ends are the
+    run), name it and OK: it joins the Valves & Instruments list and places,
+    turns and bolts up like the built-in ones. A tee sits in the line on its
+    run with its branch straight up; turn it round the pipe with the ring.
+    Run a branch pipe off it as its own route: a 3D Sketch starting on the
+    tee's branch end (that end is left plain for a weld tee, flanged for a
+    flanged one). Two ends that aren't in line are refused (that's a tee).
   - **Pipe from Scan:** reverse-engineer pipework from a 3D scan. **Import
     Scan** reads OBJ, STL or PLY meshes and XYZ / ASC / PTS point clouds of
     any size (the whole scan is kept for measuring, a lighter copy is shown;

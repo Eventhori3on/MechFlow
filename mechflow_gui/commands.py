@@ -708,7 +708,8 @@ def register():
     Gui.addCommand("MechFlow_Sketch3D", _simple(
         "3D Sketch", "Lines straight in 3D space for a pipe route: click in the view, lines "
         "run along X, Y or Z (Tab changes plane), start or end on flange and nozzle edges, "
-        "type exact lengths", icon_path("Sketch3D.svg"), lambda: _run("sketch3d", "sketch_3d"),
+        "type exact lengths. With a route, pipe or fitting selected it edits that route's "
+        "sketch", icon_path("Sketch3D.svg"), lambda: _run("sketch3d", "sketch_3d"),
         lambda: True))
     Gui.addCommand("MechFlow_Valves", _simple(
         "Valves and Instruments", "Put a valve or instrument on a route's pipe: click the pipe; "
