@@ -207,15 +207,20 @@ Each feature has its own panel, and you edit it again by double-clicking.
 - **Routing tab (Tube and Pipe style):**
   - **Draw Pipe:** the quickest way in. Pick the pipe spec and size, then
     draw - the real pipe, elbows, tees and flanges appear as each line goes
-    in, and a leg too short for its elbows is flagged straight away. Start
-    on a nozzle or flange face, a tee's branch end, or another route's open
-    end (you carry on drawing that route, welded on); click part way along
-    a pipe to branch off it and a tee goes in. **Route to... (R)**: click
-    where the pipe has to go and MechFlow offers the square ways round -
-    Tab for the next, click to take it. **Click a straight** for its grips:
-    drag it across (the pipes either side stretch) or type its length. OK
-    builds the route (the 3D Sketch is made for you behind the scenes).
-    Select a route and click Draw Pipe to change it the same way.
+    in, and a leg too short for its elbows is flagged straight away. Click a
+    **flange** (a nozzle's, or the open end of any route) to start or finish
+    on it: the pipe bolts to it (gasket, mating flange, bolts) and takes its
+    size. Finish on **another route's pipe** and a tee goes in there (the new
+    pipe joins that route); click part way along a pipe to branch off it.
+    **Route to... (R)**: click where the pipe has to go - a flange, a pipe or
+    a point - and MechFlow offers the square ways round (straight off and
+    onto flange faces, square onto a pipe for the tee); Tab for the next,
+    click to take it. **Exact lengths:** the length box stays by the corner
+    you're drawing from - type a number (or Tab) and press Enter.
+    **Move Pipe (M):** click a straight to drag it across (the pipes either
+    side stretch) or type its length. P changes the drawing plane. OK builds
+    the route (the 3D Sketch is made for you). Select a route and click Draw
+    Pipe to change it the same way.
   - **3D Sketch:** draw a pipe run straight in 3D space, renamable in the tree
     like any feature. Click a nozzle flange to start on it (the point snaps to
     the flange centre), then click along; lines lock to X, Y or Z and round to

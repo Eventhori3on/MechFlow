@@ -159,13 +159,15 @@ def _clean(pts):
     return out
 
 
-def auto_routes(S, T, ds=None, dt=None, back=None, leg_min=0.0, end_min=0.0):
+def auto_routes(S, T, ds=None, dt=None, back=None, leg_min=0.0, end_min=0.0, perp=None):
     """Square routes from S to T: [[S, ..., T]], fewest bends first.
     ds: the way the pipe has to leave S (a nozzle's axis), dt: the way it
     has to leave T going back (so it arrives along -dt); back: the way the
     pipe came into S (it can't turn straight back). Straights between two
-    bends at least leg_min, the first and last at least end_min."""
+    bends at least leg_min, the first and last at least end_min. perp: the
+    last straight must be square to this (T is on a pipe: a tee goes in)."""
     stub = max(end_min, 1.0)
+    ds, dt, back = _axis(ds), _axis(dt), _axis(back)
     A = S + ds * stub if ds is not None else V(S)
     B = T + dt * stub if dt is not None else V(T)
     found = {}
@@ -187,7 +189,7 @@ def auto_routes(S, T, ds=None, dt=None, back=None, leg_min=0.0, end_min=0.0):
         if dt is not None:
             pts.append(V(T))
         pts = _clean(pts)
-        if len(pts) < 2 or not _valid(pts, ds, dt, back, leg_min, end_min):
+        if len(pts) < 2 or not _valid(pts, ds, dt, back, leg_min, end_min, perp):
             continue
         key = tuple((round(q.x, 1), round(q.y, 1), round(q.z, 1)) for q in pts)
         found[key] = pts
@@ -197,7 +199,21 @@ def auto_routes(S, T, ds=None, dt=None, back=None, leg_min=0.0, end_min=0.0):
     return out
 
 
-def _valid(pts, ds, dt, back, leg_min, end_min):
+def _axis(d):
+    """A direction within a whisker of X, Y or Z made exactly that (flange
+    axes carry rounding from their rotations)."""
+    if d is None or d.Length < 1e-9:
+        return None
+    u = V(d)
+    u.normalize()
+    for a in AX:
+        for sg in (1, -1):
+            if u.dot(a * sg) > 1 - 1e-6:
+                return a * sg
+    return u
+
+
+def _valid(pts, ds, dt, back, leg_min, end_min, perp=None):
     dirs = []
     for i in range(len(pts) - 1):
         d = pts[i + 1] - pts[i]
@@ -206,13 +222,16 @@ def _valid(pts, ds, dt, back, leg_min, end_min):
             return False
         dirs.append((V(d).normalize(), L))
     for i in range(len(dirs) - 1):
-        if dirs[i][0].dot(dirs[i + 1][0]) < -1 + 1e-9:
+        if dirs[i][0].dot(dirs[i + 1][0]) < -1 + 1e-6:
             return False                      # straight back on itself
-    if back is not None and dirs[0][0].dot(back) < -1 + 1e-9:
+    if back is not None and dirs[0][0].dot(back) < -1 + 1e-6:
         return False
-    if ds is not None and dirs[0][0].dot(ds) < 1 - 1e-9:
+    if ds is not None and dirs[0][0].dot(ds) < 1 - 1e-6:
         return False
-    if dt is not None and dirs[-1][0].dot(dt * -1) < 1 - 1e-9:
+    if dt is not None and dirs[-1][0].dot(dt * -1) < 1 - 1e-6:
+        return False
+    if perp is not None and perp.Length > 1e-9 and \
+            abs(dirs[-1][0].dot(V(perp).normalize())) > 1e-6:
         return False
     n = len(dirs)
     for i, (_d, L) in enumerate(dirs):
@@ -226,6 +245,28 @@ def _valid(pts, ds, dt, back, leg_min, end_min):
 
 
 # ------------------------------------------------------------ geometry helpers
+
+def face_edge(fl):
+    """The round edge of a flange's joint face (what a pipe is anchored to)."""
+    from mechflow_gui import stdparts
+    try:
+        info = stdparts.flange_info(fl.StdType, fl.Size, fl.Rating)
+        face, _n = stdparts._face_frame(fl)
+    except Exception:
+        return None
+    best = None
+    for i, e in enumerate(fl.Shape.Edges):
+        c = getattr(e, "Curve", None)
+        if type(c).__name__ == "Circle" and abs(2 * c.Radius - info["face"]) < 1e-3:
+            d = (c.Center - face).Length
+            if best is None or d < best[1]:
+                best = (f"Edge{i + 1}", d)
+    return best[0] if best else None
+
+
+def _key(g):
+    return (round(g.x, 1), round(g.y, 1), round(g.z, 1))
+
 
 def clashes(pts, obstacles, radius, skip_ends=None):
     """Labels of the obstacles a pipe along pts (global) runs through. The
@@ -321,6 +362,26 @@ def make_panel(sketch=None, routes=None):
 _CLS = []
 
 
+def _keep_esc(w, on_esc):
+    """Esc in a number box goes back to the 3D view (instead of cancelling
+    the whole panel)."""
+    try:
+        from PySide6 import QtCore
+    except ImportError:
+        from PySide2 import QtCore
+
+    class _Esc(QtCore.QObject):
+        def eventFilter(self, obj, ev):
+            if ev.type() == QtCore.QEvent.KeyPress and ev.key() == QtCore.Qt.Key_Escape:
+                QtCore.QTimer.singleShot(0, on_esc)
+                return True
+            return False
+    f = _Esc(w)
+    w.installEventFilter(f)
+    w._mf_esc = f
+    return w
+
+
 def _pipe_panel_class():
     if _CLS:
         return _CLS[0]
@@ -341,6 +402,10 @@ def _pipe_panel_class():
             self.pending = None           # (line, local point): a branch starts here
             self.auto = None              # Route to... state
             self.joins = []               # (other route, global point) ends welded on
+            self.flanges = {}             # flanges seen under the mouse: key -> (point, normal, obj)
+            self.mates = []               # global points where the pipe bolts to a flange
+            self.merged = None            # the route this new pipe joined into
+            self._hover_dir = None        # the way the rubber band points (local)
             self._grips = []
             self._grip_timer = QtCore.QTimer()
             self._grip_timer.setInterval(60)
@@ -398,6 +463,12 @@ def _pipe_panel_class():
                                      "the next, click again to take it")
             self.route_to.clicked.connect(self.start_auto)
             row.addWidget(self.route_to)
+            self.move_btn = QtWidgets.QPushButton("Move Pipe (M)")
+            self.move_btn.setCheckable(True)
+            self.move_btn.setToolTip("Click a straight to drag it across (the pipes either "
+                                     "side stretch) or type its length - no drawing while on")
+            self.move_btn.toggled.connect(self.set_move_mode)
+            row.addWidget(self.move_btn)
             g.addLayout(row, 3, 0, 1, 2)
             self.perr = QtWidgets.QLabel()
             self.perr.setWordWrap(True)
@@ -442,7 +513,9 @@ def _pipe_panel_class():
         def settings(self):
             from mechflow_gui import pipespec, routing
             if self.route is not None:
-                return routing.settings(self.route)
+                s = routing.settings(self.route)
+                s["EndTypes"].update(self._join_ends())
+                return s
             sp = pipespec.get(self.spec.currentText()) or pipespec.all_specs()[0]
             s = spec_settings(sp, self.size.currentText())
             s["EndTypes"] = self._join_ends()
@@ -461,6 +534,11 @@ def _pipe_panel_class():
                 p = to_local(self.sketch, g)
                 out[",".join(f"{x:g}" for x in (round(p.x, 3), round(p.y, 3),
                                                  round(p.z, 3)))] = "Plain"
+            from mechflow_gui import routing
+            for g in self.mates:
+                p = to_local(self.sketch, g)
+                out[",".join(f"{x:g}" for x in (round(p.x, 3), round(p.y, 3),
+                                                 round(p.z, 3)))] = routing.MATE
             return out
 
         def _segments(self):
@@ -573,14 +651,22 @@ def _pipe_panel_class():
                     t = (f"<b>Route to:</b> way {a['i'] + 1} of {len(a['cands'])} - Tab for "
                          "another, click (or Enter) to take it, Esc to stop."
                          + self._clash_text(a["cands"][a["i"]]))
+            elif self.move_mode():
+                t = ("<b>Move Pipe:</b> click a straight, then drag its arrows across or type "
+                     "its length (Tab) and press Enter. M to go back to drawing.")
             elif self.pending is not None:
                 t = "<b>Branch:</b> click where the branch goes (or Route to...); Esc to stop."
-            elif self.ed.current is None and self.ed.lines:
-                t = ("Click a pipe to branch off it or to get its grips (drag it across, type "
-                     "its length); click a point to carry on from it.")
+            elif self.ed.current is not None:
+                t = ("<b>Click the next corner</b>, or type a length (or Tab) and press Enter. "
+                     "Finish on a flange or a pipe (a tee goes in). R: Route to. Esc ends.")
+            elif self.ed.lines:
+                t = ("Click a pipe to branch off it, a point to carry on from it, or a flange to "
+                     "start a pipe bolted to it.")
             else:
-                return
-            self.msg.setText(t + "<br>" + self.msg.text().split("<br>", 1)[-1])
+                t = ("<b>Click where the pipe starts</b> - a flange (it bolts to it), a pipe "
+                     "(a tee), or anywhere.")
+            rest = self.msg.text().split("<br>", 1)[-1].replace("(Tab to change;", "(P to change;")
+            self.msg.setText(t + "<br>" + rest)
 
         # -- where things are
         def _info_at(self, pos):
@@ -596,6 +682,121 @@ def _pipe_panel_class():
                     continue
                 return info
             return None
+
+        def _pick(self, pos):
+            """Flanges snap to their joint face (whatever circle the mouse is on)."""
+            from mechflow_gui import routing
+            try:
+                info = self._info_at(pos)
+            except Exception:
+                info = None
+            if info:
+                obj, path, gpl, top = None, "", None, None
+                try:
+                    doc = App.getDocument(info["Document"]) if info.get("Document") else self.doc
+                    top = info.get("ParentObject") or doc.getObject(info.get("Object", ""))
+                    sub = info.get("SubName") or info.get("Component", "") or ""
+                    path = sub.rsplit(".", 1)[0] + "." if "." in sub else ""
+                    obj = top
+                    if path and top is not None:
+                        # inside an assembly / part / link: the part itself
+                        obj = top.getSubObject(path, retType=1)
+                        gpl = top.getSubObject(path, retType=3)
+                        try:                       # the assembly may sit in another
+                            outer = top.getGlobalPlacement().multiply(top.Placement.inverse())
+                            gpl = outer.multiply(gpl)
+                        except Exception:
+                            pass
+                except Exception:
+                    obj = None
+                f = routing.flange_face(obj, gpl) if obj is not None else None
+                if f is None and "x" in info and not (obj is not None and (
+                        sketch3d.is_sketch3d(obj) or routing.route_of(obj) in self.routes())):
+                    # on a nozzle's pipe or near a flange: its free face
+                    near = self.flange_near(_V(info["x"], info["y"], info["z"]))
+                    if near is not None:
+                        f = (near["c"], near["n"])
+                        obj, top, path = near["obj"], near["top"], near["path"]
+                if f is not None:
+                    g, n = f
+                    anchor = None
+                    if not getattr(obj, "MechFlowRoute", ""):
+                        e = face_edge(obj)
+                        if e:                      # a nozzle's flange: follow it if it moves
+                            anchor = (top, path + e) if path else (obj, e)
+                    self.flanges[_key(g)] = (_V(g), _V(n), obj)
+                    return _V(g), anchor, None
+            return super()._pick(pos)
+
+        def all_flanges(self):
+            """Every flange face in the document (also inside assemblies and
+            links): [{c, n, obj, top, path, od, busy}]; busy: something is
+            already bolted to it."""
+            if getattr(self, "_fl_cache", None) is not None:
+                return self._fl_cache
+            from mechflow_gui import routing, stdparts
+            out = []
+            hidden = {o.Name for o in self._hidden}
+
+            def add(c, n, obj, top, path):
+                if any((e["c"] - c).Length < 0.5 for e in out):
+                    return
+                try:
+                    od = stdparts.flange_info(obj.StdType, obj.Size, obj.Rating)["OD"]
+                except Exception:
+                    od = 200.0
+                out.append({"c": _V(c), "n": _V(n), "obj": obj, "top": top, "path": path,
+                            "od": od, "busy": False})
+            for x in self.doc.Objects:
+                if x.Name in hidden or x.Name == PREVIEW:
+                    continue
+                f = routing.flange_face(x)
+                if f is not None:
+                    add(f[0], f[1], x, None, "")
+            for top in self.doc.RootObjects:
+                found = []
+                routing._walk_flanges(top, "", 0, found)
+                for prefix, leaf in found:
+                    try:
+                        gpl = top.getSubObject(prefix, retType=3)
+                        f = routing.flange_face(leaf, gpl)
+                    except Exception:
+                        f = None
+                    if f is not None:
+                        add(f[0], f[1], leaf, top, prefix)
+            for e in out:
+                for o in out:
+                    if o is not e and (o["c"] - e["c"]).Length < 6.0 and o["n"].dot(e["n"]) < -0.99:
+                        e["busy"] = True
+            self._fl_cache = out
+            return out
+
+        def flange_near(self, p):
+            """The free flange face p is on or just behind (a nozzle's pipe)."""
+            best = None
+            for e in self.all_flanges():
+                if e["busy"]:
+                    continue
+                d = p - e["c"]
+                along = d.dot(e["n"])
+                radial = (d - e["n"] * along).Length
+                if radial <= e["od"] / 2 + 15 and -min(400.0, e["od"] + 100) <= along <= 15:
+                    if best is None or d.Length < best[0]:
+                        best = (d.Length, e)
+            return best[1] if best else None
+
+        def flange_for(self, g):
+            """(point, normal, flange) if global point g is on a flange face seen."""
+            f = self.flanges.get(_key(g))
+            if f is not None:
+                return f
+            for v in self.flanges.values():
+                if (v[0] - g).Length < 0.5:
+                    return v
+            return None
+
+        def _local_dir(self, g, n):
+            return to_local(self.sketch, g + n) - to_local(self.sketch, g)
 
         def cur_local(self):
             if self.ed.current is not None:
@@ -716,7 +917,14 @@ def _pipe_panel_class():
                         j = self._junction(lh[0], c, lh[1])
                         self._rubber([c, j])
                         return
+                if self.move_mode():
+                    return
                 super()._on_move(cb)
+                c = self.cur_local()
+                if c is not None and self.hover:
+                    d = self.hover[0] - c
+                    if d.Length > 1e-6:
+                        self._hover_dir = _V(d).normalize()
                 if self.pending is not None and self.ed.current is None and self.hover:
                     self._rubber([self.pending[1], self.hover[0]])
             except Exception:
@@ -728,6 +936,9 @@ def _pipe_panel_class():
             self._line.numVertices.setValue(len(g))
             self._dot.numPoints.setValue(0)
             if len(g) == 2:
+                d = local_pts[1] - local_pts[0]
+                if d.Length > 1e-6:
+                    self._hover_dir = _V(d).normalize()
                 self._box.set_quiet(round((g[1] - g[0]).Length))
                 self._box.place((g[0] + g[1]) * 0.5)
 
@@ -778,6 +989,15 @@ def _pipe_panel_class():
 
         def pipe_click(self, pos):
             ed = self.ed
+            if self.move_mode():
+                lh = self.line_hit(pos)
+                if lh is not None:
+                    self.select_line(lh[0])
+                else:
+                    self.sel_line = None
+                    self._hide_grips()
+                    self._refresh_msg()
+                return True
             hit = self._pick(pos)
             if hit is None:
                 lh = self.line_hit(pos)
@@ -786,7 +1006,7 @@ def _pipe_panel_class():
                     if ed.current is not None:
                         self.join_line(k, self._junction(k, ed.pts[ed.current], q))
                     else:
-                        self.select_line(k, q)
+                        self.branch_at(k, q)
                     return True
                 oh = self.other_route_hit(pos)
                 if oh is not None:
@@ -806,7 +1026,23 @@ def _pipe_panel_class():
                 self.ed.current = i
             self._hide_grips()
             self.sel_line = None
+            g = to_global(self.sketch, q)
+            fl = self.flange_for(g) if idx is None else None
+            starting = self.ed.current is None
+            first = starting and not self.ed.lines and self.route is None
             super().click(q, anchor, idx)
+            if fl is None:
+                return
+            if not any((m - fl[0]).Length < 0.5 for m in self.mates):
+                self.mates.append(_V(fl[0]))
+            if first:
+                size = getattr(fl[2], "Size", "")
+                if size and self.size.findText(size) >= 0:
+                    self.size.setCurrentText(size)     # the pipe to suit the flange
+            elif not starting:
+                self.ed.stop()                         # bolted on: that run is done
+                self._clear_preview()
+                self._refresh()
 
         def join_line(self, k, p):
             """End the current run on line k at p (a tee goes in)."""
@@ -819,30 +1055,58 @@ def _pipe_panel_class():
             self._clear_preview()
             self._refresh()
 
+        def _snap_on(self, k, q):
+            a, _b = self.ed.lines[k]
+            A = self.ed.pts[a]
+            d = q - A
+            step = self.step.value()
+            if step > 0 and d.Length > 0:
+                q = A + d * (round(d.Length / step) * step / d.Length)
+            return q
+
         def select_line(self, k, q=None):
-            """Line k gets its grips; a branch can start at q."""
+            """Line k gets its grips (Move Pipe); with q a branch can start there."""
             self.sel_line = k
             if q is not None:
-                a, _b = self.ed.lines[k]
-                A = self.ed.pts[a]
-                d = q - A
-                step = self.step.value()
-                if step > 0 and d.Length > 0:
-                    q = A + d * (round(d.Length / step) * step / d.Length)
-                self.pending = (k, q)
+                self.pending = (k, self._snap_on(k, q))
             self._show_grips(k)
             self._refresh_msg()
 
+        def branch_at(self, k, q):
+            """A branch starts on line k at q (the next click draws it)."""
+            self.sel_line = None
+            self._hide_grips()
+            self.pending = (k, self._snap_on(k, q))
+            self._refresh_msg()
+
         def branch_from(self, k, p):
-            self.select_line(k, p)
+            self.branch_at(k, p)
+
+        # -- Move Pipe mode
+        def move_mode(self):
+            b = getattr(self, "move_btn", None)
+            return b is not None and b.isChecked()
+
+        def set_move_mode(self, on):
+            if self.move_btn.isChecked() != bool(on):
+                self.move_btn.setChecked(bool(on))     # comes back here
+                return
+            self.pending = None
+            self.auto = None
+            if on:
+                self.ed.stop()
+            else:
+                self.sel_line = None
+                self._hide_grips()
+            self._clear_preview()
+            self._refresh_msg()
+            QtCore.QTimer.singleShot(0, self._focus_view)
 
         def other_route_click(self, r, sk, k, c, free):
             ed = self.ed
             if ed.current is not None:
                 if free is None:
-                    self.perr.setText("To join into the middle of that pipe, draw the branch "
-                                      "from it: OK this one, then click that pipe.")
-                    self.perr.show()
+                    self.join_other(r, sk, k, c)
                     return
                 g = to_global(sk, sketch3d.Editor(sk).pts[free])
                 ed.line_to(to_local(self.sketch, g))
@@ -862,6 +1126,77 @@ def _pipe_panel_class():
                 self._refresh_msg()
             else:
                 self.select_line(k, c)
+
+        def join_other(self, r, sk, k, c, at=None):
+            """End the current run on route r's line k (a tee goes in there):
+            this new pipe becomes part of r."""
+            if self.route is not None:
+                self.perr.setText(f"To join {r.Label}, OK this route first, then Draw Pipe a "
+                                  "new pipe (from a flange) and finish it on that pipe.")
+                self.perr.show()
+                return False
+            ed2 = sketch3d.Editor(sk)
+            if at is None:
+                a, b = ed2.lines[k]
+                A, B = to_global(sk, ed2.pts[a]), to_global(sk, ed2.pts[b])
+                cur = to_global(self.sketch, self.cur_local())
+                u = B - A
+                at = to_global(sk, c)
+                if u.Length > 1e-6:
+                    un = _V(u).normalize()
+                    t = max(0.0, min(u.Length, (cur - A).dot(un)))
+                    foot = A + un * t
+                    d = foot - cur
+                    if d.Length > 1e-6:
+                        dn = _V(d).normalize()
+                        if max(abs(dn.x), abs(dn.y), abs(dn.z)) > 1 - 1e-6:
+                            at = foot                  # square on: the tee's branch
+            self.merge_into(r, k, at)
+            return True
+
+        def merge_into(self, r, k, at):
+            """Move this new pipe's lines into route r's sketch, ending on its
+            line k at global point at (split there: a tee)."""
+            from mechflow_gui import routing
+            sk = routing.route_sketch(r)
+            ed2 = sketch3d.Editor(sk)
+            ed2.current = None
+            m = {}
+            for i, p in enumerate(self.ed.pts):
+                m[i] = ed2.add_point(to_local(sk, to_global(self.sketch, p)))
+            for a, b in self.ed.lines:
+                if (m[a], m[b]) not in ed2.lines and (m[b], m[a]) not in ed2.lines:
+                    ed2.lines.append((m[a], m[b]))
+            for (o, subs), i in zip(self.ed.anchors, self.ed.anchor_pts):
+                ed2.anchors.append((o, list(subs)))
+                ed2.anchor_pts.append(m[i])
+            cur = m.get(self.ed.current) if self.ed.current is not None else None
+            j = ed2.split_line(k, to_local(sk, at))
+            if cur is not None and cur != j:
+                ed2.lines.append((cur, j))
+            ed2.current = None
+            old, was_new = self.sketch, self.new
+            mine = self.spec.currentText()
+            self._unfade()
+            show_preview(self.doc, None)
+            ed2.save()
+            if was_new:
+                try:
+                    self.doc.removeObject(old.Name)
+                except Exception:
+                    pass
+            self.sketch, self.ed, self.route, self.new = sk, ed2, r, False
+            self.merged = r
+            self._fade_routes()
+            self._set_mode_ui()
+            self._clear_preview()
+            self._refresh()
+            spec = getattr(r, "Spec", "") or r.Standard
+            note = f"Joined into <b>{r.Label}</b> with a tee - the new pipe is part of it now"
+            if mine and spec != mine:
+                note += f" and takes its spec ({spec}, {r.Size})"
+            self.sel_box.setText(note + ". OK builds it.")
+            self.sel_box.show()
 
         def switch_to(self, r):
             """Carry on drawing route r (this new, empty sketch is dropped)."""
@@ -912,6 +1247,8 @@ def _pipe_panel_class():
             box = vh.ViewBox(" mm", 1, 1e6, 0)
             box.set_quiet(round((B - A).Length))
             box.valueChanged.connect(lambda v, k=k: self.set_line_length(k, v))
+            sketch3d.keep_enter(box, self._focus_view)
+            _keep_esc(box, self._focus_view)
             box.place(mid, 20, 18)
             box.show()
             self._grips.append(("box", None, box))
@@ -1049,14 +1386,19 @@ def _pipe_panel_class():
             self._refresh_msg()
 
         def _target(self, pos):
-            """(local point, anchor, sketch point, own line) under the mouse."""
+            """(local point, anchor, sketch point, own line, other route's line)
+            under the mouse."""
             hit = self._pick(pos)
             if hit is not None:
                 g, anchor, idx = hit
-                return to_local(self.sketch, g), anchor, idx, None
+                return to_local(self.sketch, g), anchor, idx, None, None
             lh = self.line_hit(pos)
             if lh is not None:
-                return lh[1], None, None, lh[0]
+                return lh[1], None, None, lh[0], None
+            oh = self.other_route_hit(pos)
+            if oh is not None and self.route is None:
+                r, sk, k, c, _free = oh
+                return to_local(self.sketch, to_global(sk, c)), None, None, None, (r, sk, k)
             g = self._ray_point(pos)
             if g is None:
                 return None
@@ -1065,7 +1407,7 @@ def _pipe_panel_class():
             if c is not None and self.step.value() > 0:
                 st = self.step.value()
                 q = c + _V(*(round((q[i] - c[i]) / st) * st for i in range(3)))
-            return q, None, None, None
+            return q, None, None, None, None
 
         def _dirs(self, anchor_obj=None, anchor_sub=None, at=None):
             """Way out of a nozzle / flange edge, in the sketch's axes."""
@@ -1076,14 +1418,17 @@ def _pipe_panel_class():
             g = f[0]
             return to_local(self.sketch, g + ax) - to_local(self.sketch, g)
 
-        def candidates(self, T, t_anchor=None, t_line=None):
+        def candidates(self, T, t_anchor=None, t_line=None, t_other=None):
             ed = self.ed
             S = self.cur_local()
             ds = back = None
             i = ed.current
             if i is not None:
+                fs = self.flange_for(to_global(self.sketch, ed.pts[i]))
+                if fs is not None:
+                    ds = self._local_dir(fs[0], fs[1])
                 for (o, subs), j in zip(ed.anchors, ed.anchor_pts):
-                    if j == i and subs:
+                    if j == i and subs and ds is None:
                         ds = self._dirs(o, subs[0])
                 ls = ed.lines_at(i)
                 if len(ls) == 1 and ds is None:
@@ -1100,11 +1445,25 @@ def _pipe_panel_class():
                 u = ed.pts[b] - ed.pts[a]
                 back = None
             dt = None
-            if t_anchor is not None:
+            ft = self.flange_for(to_global(self.sketch, T))
+            if ft is not None:
+                dt = self._local_dir(ft[0], ft[1])
+            elif t_anchor is not None:
                 dt = self._dirs(*t_anchor)
+            perp = None
+            if t_line is not None:
+                a_, b_ = ed.lines[t_line]
+                perp = ed.pts[b_] - ed.pts[a_]
+            elif t_other is not None:
+                r_, sk_, k_ = t_other
+                e2 = sketch3d.Editor(sk_)
+                a_, b_ = e2.lines[k_]
+                A_, B_ = to_global(sk_, e2.pts[a_]), to_global(sk_, e2.pts[b_])
+                perp = to_local(self.sketch, B_) - to_local(self.sketch, A_)
             R = self.bend_room()
             cands = auto_routes(S, T, ds, dt, back, leg_min=2 * R + 10,
-                                end_min=R + (100 if (ds is not None or dt is not None) else 20))
+                                end_min=R + (100 if (ds is not None or dt is not None) else 20),
+                                perp=perp)
             # ways round that go through something come last
             obst = self._obstacles()
             r = self.od() / 2 + 5
@@ -1152,7 +1511,7 @@ def _pipe_panel_class():
                 t = self._target(pos)
                 if t is None:
                     return
-                cands = self.candidates(t[0], t[1], t[3])
+                cands = self.candidates(t[0], t[1], t[3], t[4])
                 a["preview"] = cands[0] if cands else [self.cur_local(), t[0]]
                 self._rubber(a["preview"])
                 return
@@ -1167,11 +1526,12 @@ def _pipe_panel_class():
             else:
                 self.auto_accept()
 
-        def auto_target(self, T, anchor=None, idx=None, line=None):
+        def auto_target(self, T, anchor=None, idx=None, line=None, other=None):
             a = self.auto if self.auto is not None else {}
             self.auto = a
-            a.update({"T": T, "anchor": anchor, "idx": idx, "line": line, "i": 0})
-            a["cands"] = self.candidates(T, anchor, line)
+            a.update({"T": T, "anchor": anchor, "idx": idx, "line": line, "other": other,
+                      "i": 0})
+            a["cands"] = self.candidates(T, anchor, line, other)
             if not a["cands"]:
                 self.perr.setText("No square way round fits there (too close for the elbows) - "
                                   "draw it by hand, or pick a point further away.")
@@ -1217,7 +1577,17 @@ def _pipe_panel_class():
             for q in pts[1:-1]:
                 ed.line_to(q)
             last = pts[-1]
-            if a.get("line") is not None:
+            fl = self.flange_for(to_global(self.sketch, last))
+            if a.get("other") is not None:
+                r_, sk_, k_ = a["other"]
+                self.merge_into(r_, k_, to_global(self.sketch, last))
+                return
+            if fl is not None:
+                ed.line_to(last, a.get("anchor"))
+                if not any((m - fl[0]).Length < 0.5 for m in self.mates):
+                    self.mates.append(_V(fl[0]))
+                ed.stop()
+            elif a.get("line") is not None:
                 i = ed.split_line(a["line"], last)
                 ed.line_to(ed.pts[i])
                 ed.stop()
@@ -1252,9 +1622,32 @@ def _pipe_panel_class():
                         self._refresh_msg()
                         cb.setHandled()
                     return
-                if k == coin.SoKeyboardEvent.R:
+                if k == coin.SoKeyboardEvent.R and not self.move_mode():
                     self.start_auto()
                     cb.setHandled()
+                    return
+                if k == coin.SoKeyboardEvent.M:
+                    self.set_move_mode(not self.move_mode())
+                    cb.setHandled()
+                    return
+                if k == coin.SoKeyboardEvent.P:
+                    i = sketch3d.PLANES.index(self.plane)
+                    self._set_plane(sketch3d.PLANES[(i + 1) % len(sketch3d.PLANES)])
+                    cb.setHandled()
+                    return
+                ch = ""
+                try:
+                    ch = ev.getPrintableCharacter()
+                except Exception:
+                    pass
+                if k == coin.SoKeyboardEvent.TAB or (ch and ch in "0123456789"):
+                    cb.setHandled()
+                    if self.move_mode():
+                        for kind, _n, g in self._grips:
+                            if kind == "box":
+                                self._edit_box(g, ch)
+                    elif self.ed.current is not None:
+                        self._edit_box(self._box, ch)
                     return
                 if k == coin.SoKeyboardEvent.ESCAPE and (self.pending is not None or
                                                           self.sel_line is not None):
@@ -1273,11 +1666,64 @@ def _pipe_panel_class():
             self.pending = None
             super()._stop()
 
+        # -- typed lengths
+        def _install(self):
+            super()._install()
+            box = getattr(self, "_box", None)
+            if box is None:
+                return
+            orig_q, orig_p = box.set_quiet, box.place
+
+            def set_quiet(v, orig=orig_q, box=box):
+                if not box.hasFocus():                 # don't type over the user
+                    orig(v)
+
+            def place(pt, dx=18, dy=-12, orig=orig_p):
+                c = self.cur_local()                   # stays by the corner, not the mouse
+                orig(to_global(self.sketch, c) if c is not None else pt, 26, 16)
+            box.set_quiet, box.place = set_quiet, place
+            sketch3d.keep_enter(box, self._typed_length)
+            _keep_esc(box, self._focus_view)
+
+        def _edit_box(self, box, first=""):
+            box.show()
+            box.raise_()
+            box.setFocus()
+            le = box.lineEdit()
+            if first:
+                le.setText(first + box.suffix())
+                le.setCursorPosition(len(first))
+            else:
+                le.selectAll()
+
+        def _typed_length(self):
+            """Enter in the length box: a straight that long, the way the mouse
+            points (else on from the last straight)."""
+            c = self.cur_local()
+            L = self._box.value()
+            d = self._hover_dir
+            if d is None and self.ed.current is not None:
+                ls = self.ed.lines_at(self.ed.current)
+                if ls:
+                    a_, b_ = self.ed.lines[ls[0]]
+                    o_ = b_ if a_ == self.ed.current else a_
+                    d = self.ed.pts[self.ed.current] - self.ed.pts[o_]
+                    d = _V(d).normalize() if d.Length > 1e-6 else None
+            if c is not None and d is not None and L > 0:
+                self.click(c + d * L)
+            QtCore.QTimer.singleShot(0, self._focus_view)
+
         # -- finish
         def _uninstall(self):
             self._hide_grips()
             self._settle.stop()
             super()._uninstall()
+            try:
+                # clicks in the view also select things in FreeCAD: drop them,
+                # or the next Draw Pipe would open that route to change it
+                Gui.Selection.clearSelection()
+            except Exception:
+                pass
 
         def accept(self):
             from mechflow_gui import pipespec, routing, stdparts, toolbox
@@ -1293,25 +1739,19 @@ def _pipe_panel_class():
             try:
                 if self.route is None and self.ed.lines:
                     sp = pipespec.get(self.spec.currentText()) or pipespec.all_specs()[0]
-                    ty = routing.types_for(sp["standard"], sp["bend"])
-                    starts = []
-                    for o, subs in self.ed.anchors:
-                        for sub in subs:
-                            try:
-                                if stdparts.joint_with(o, sub, ty["flange"]) is not None:
-                                    starts.append((o, sub))
-                            except Exception:
-                                pass
                     r = routing.make_route(sketch3d._container(self.sketch),
                                            [(self.sketch, None)], sp["standard"],
                                            self.size.currentText(), sp["schedule"], sp["bend"],
-                                           sp["free_ends"], sp["rating"], starts,
+                                           sp["free_ends"], sp["rating"], (),
                                            build_now=False)
                     pipespec.apply_to_route(r, sp)
                     self.route = r
                     p = App.ParamGet("User parameter:BaseApp/Preferences/Mod/MechFlow")
                     p.SetString("DrawPipeSpec", sp["name"])
                     p.SetString("DrawPipeSize", self.size.currentText())
+                for g in self.mates:
+                    if self.route is not None:
+                        routing.set_end_type(self.route, to_local(self.sketch, g), routing.MATE)
                 for other, g in self.joins:
                     routing.set_end_type(self.route, to_local(self.sketch, g), "Plain")
                     routing.set_end_type(other, g, "Plain")

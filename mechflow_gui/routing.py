@@ -36,6 +36,7 @@ TOL = 0.01
 STANDARDS = ["EN", "ASME"]
 BENDS = {"EN": ["3D", "2D", "5D"], "ASME": ["LR"]}
 ENDS = ["Plain", "Weld neck flange", "Blind flange", "Cap"]
+MATE = "Mating flange"          # an end bolted to an existing flange there (end types only)
 
 
 # ------------------------------------------------------------ catalogue
@@ -526,6 +527,19 @@ def plan(route_like, starts=()):
             if (V(*xyz) - p).Length < 1.0:
                 mode = m_
         tset = trim_start if at_start else trim_end
+        if mode == MATE:
+            # the existing flange's face is at p: gasket, then our flange
+            g_ = stdparts.gasket_dims(gt, size, frate)[2]
+            H = stdparts._length_in_part(ty["flange"], size, frate)
+            tset[k] = g_ + H
+            parts.append({"type": gt, "size": size, "rating": frate, "length": 0.0,
+                          "angle": 0.0, "role": "mate-gasket",
+                          "placement": App.Placement(V(p), _rot(u))})
+            parts.append({"type": ty["flange"], "size": size, "rating": frate, "length": 0.0,
+                          "angle": 0.0, "role": "mate-flange", "face": V(p), "gap": g_,
+                          "placement": App.Placement(p + u * (g_ + H), _rot(-u))})
+            end_info.append((mode, i))
+            continue
         if mode in ("Weld neck flange", "Blind flange"):
             H = stdparts._length_in_part(ty["flange"], size, frate)
             tset[k] = H
@@ -735,7 +749,7 @@ def end_types(o):
             xyz = tuple(float(x) for x in k.split(","))
         except ValueError:
             continue
-        if len(xyz) == 3 and v.strip() in ENDS:
+        if len(xyz) == 3 and (v.strip() in ENDS or v.strip() == MATE):
             out[xyz] = v.strip()
     return out
 
@@ -979,6 +993,7 @@ def _build(o):
             "ports": inline.port_sizes(c, o.Standard, frate)})
     parts, ends = plan(s, starts)
     comp_parts = {}
+    mates = []
     for p in parts:
         if p["role"] == "component":
             c = p["obj"]
@@ -994,6 +1009,8 @@ def _build(o):
                 part.addProperty("App::PropertyString", "RouteLine", "Route",
                                  "The route line this pipe is on (for Change Size)", 4)
             part.RouteLine = p["key"]
+        if p["role"] == "mate-flange":
+            mates.append((part, p["face"], p["gap"]))
         if p["role"] in ("comp-gasket", "comp-flange"):
             comp_parts.setdefault(p["comp"].Name, {})[p["role"] + p["side"]] = part
             comp_parts[p["comp"].Name]["size" + p["side"]] = p["size"]
@@ -1041,6 +1058,21 @@ def _build(o):
                 made += b
             except Exception as e:
                 App.Console.PrintWarning(f"MechFlow: {c.Label}: bolts not added ({e})\n")
+    # bolts through the ends that meet an existing flange
+    if mates:
+        doc.recompute()
+        for part, face, gap in mates:
+            other = flange_at(doc, _to_global(container, face), exclude=made)
+            if other is None:
+                App.Console.PrintWarning(f"MechFlow: {o.Label}: no flange found at "
+                                         f"{_fmt(face)} to bolt to\n")
+                continue
+            try:
+                b = stdparts.bolt_set(container, part, other, gap)
+                _tag(b, o)
+                made += b
+            except Exception as e:
+                App.Console.PrintWarning(f"MechFlow: {o.Label}: bolts not added ({e})\n")
     if o.Material:                       # the spec's material on the steel parts
         from mechflow_gui import material as _mat, pipespec
         for m in made:
@@ -1065,6 +1097,83 @@ def _build(o):
     o.Error = ""
     doc.recompute()
     return made
+
+
+def _to_global(container, p):
+    try:
+        if container is not None:
+            return container.getGlobalPlacement().multVec(V(p))
+    except Exception:
+        pass
+    return V(p)
+
+
+def flange_face(x, global_pl=None):
+    """(face centre, direction out of the face), global, of a MechFlow
+    flange object - None for anything else (blind flanges included).
+    global_pl: the flange's own global placement when it is reached
+    through an assembly or link (getSubObject(..., retType=3))."""
+    from mechflow_gui import stdparts
+    t = getattr(x, "StdType", "") or ""
+    if not stdparts.is_flange(t) or t.endswith("-05") or t.endswith("-BL"):
+        return None
+    try:
+        face, n = stdparts._face_frame(x)
+        gpl = global_pl if global_pl is not None else x.getGlobalPlacement()
+        outer = gpl.multiply(x.Placement.inverse())
+        return outer.multVec(face), outer.Rotation.multVec(n)
+    except Exception:
+        return None
+
+
+def flange_at(doc, point, exclude=(), tol=1.0):
+    """The flange whose joint face is at point (global) - also one inside
+    an assembly, part or link (then a stdparts._Ref)."""
+    from mechflow_gui import stdparts
+    skip = {m.Name for m in exclude}
+    for x in doc.Objects:
+        if x.Name in skip:
+            continue
+        f = flange_face(x)
+        if f is not None and (f[0] - point).Length < tol:
+            return x
+    for top in doc.RootObjects:
+        found = []
+        _walk_flanges(top, "", 0, found)
+        for prefix, leaf in found:
+            if leaf.Document is doc and leaf.Name in skip:
+                continue
+            try:
+                ref = stdparts._Ref(top, prefix, leaf)
+                f = flange_face(leaf, ref.Placement)
+            except Exception:
+                continue
+            if f is not None and (f[0] - point).Length < tol:
+                return ref
+    return None
+
+
+def _walk_flanges(top, prefix, depth, out):
+    """(sub-path, flange) of the flanges inside top (through links too)."""
+    from mechflow_gui import stdparts
+    if depth > 6:
+        return
+    try:
+        cur = top.getSubObject(prefix, retType=1) if prefix else top
+    except Exception:
+        return
+    if cur is None:
+        return
+    if prefix and stdparts.is_flange(getattr(cur, "StdType", "") or ""):
+        out.append((prefix, cur))
+        return
+    try:
+        subs = cur.getSubObjects()
+    except Exception:
+        subs = []
+    for s_ in subs or []:
+        if s_ and s_.endswith("."):
+            _walk_flanges(top, prefix + s_, depth + 1, out)
 
 
 def make_route(container, path_links, standard="EN", size="", schedule="Sch 40", bend="3D",
