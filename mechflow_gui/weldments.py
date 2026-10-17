@@ -119,7 +119,11 @@ def _bar(t, size, length, rotation, mirror):
     if mirror:
         solid = solid.transformGeometry(m)
     if rotation:
-        solid.rotate(V(0, 0, 0), V(0, 0, 1), rotation)
+        # bake it into the geometry: the caller sets solid.Placement, which
+        # would otherwise throw away a rotation held in the placement
+        r = App.Matrix()
+        r.rotateZ(math.radians(float(rotation)))
+        solid = solid.transformGeometry(r)
     return solid
 
 
