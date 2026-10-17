@@ -37,6 +37,11 @@ def keys():
     log("box length after apply 2.0", d.Box.Length.Value)
     cam = M.current_camera()
     log("camera fov applied", round(cam.get("fov", 0), 1))
+    # an App::Part's origin axes are infinite: presets must ignore them
+    d.addObject("App::Part", "Container"); d.recompute()
+    pre = M.camera_preset(d, "iso")
+    log("preset with App::Part finite", max(abs(x) for x in pre["pos"]) < 1e6)
+    d.removeObject("Container"); d.recompute()
 at(keys, 500)
 
 

@@ -261,6 +261,33 @@ def wetted_faces(shape, seeds):
     return [faces[i] for i in sorted(seen)]
 
 
+def _curved(f):
+    try:
+        return type(f.Surface).__name__ != "Plane" and not f.Surface.isPlanar()
+    except Exception:
+        return type(f.Surface).__name__ != "Plane"
+
+
+def _point_on(f):
+    """A point on the face itself. A curved face's centre of mass is off
+    the surface (a bore's is on its axis), so it can't be used to match it."""
+    c = f.CenterOfMass
+    try:
+        if f.isInside(c, 1e-4, True):
+            return c
+        u0, u1, v0, v1 = f.ParameterRange
+        for a, b in ((0.5, 0.5), (0.25, 0.5), (0.75, 0.5), (0.5, 0.25), (0.5, 0.75)):
+            p = f.valueAt(u0 + a * (u1 - u0), v0 + b * (v1 - v0))
+            if f.isInside(p, 1e-4, True):
+                return p
+        pts, _t = f.tessellate(0.5)
+        if pts:
+            return pts[0]
+    except Exception:
+        pass
+    return c
+
+
 def match_faces(shape, picked, tol=0.05):
     """Names of shape's faces that lie on one of the picked faces (the
     picked faces may have been cut into bands)."""
@@ -268,7 +295,7 @@ def match_faces(shape, picked, tol=0.05):
     out = []
     for i, f in enumerate(shape.Faces):
         try:
-            c = f.CenterOfMass
+            c = _point_on(f)
             u, v = f.Surface.parameter(c)
             n = V(f.normalAt(u, v))
         except Exception:
@@ -438,6 +465,7 @@ def prepare(study_like):
     fx = ObjectsFem.makeConstraintFixed(doc, "Fixed")
     fx.References = [(copy, tuple(fixed))]
     an.addObject(fx)
+    used = list(fixed)                  # every face a fixture or load is on
     n_loads = 0
     water = {}
     for k, l in enumerate(loads):
@@ -445,6 +473,7 @@ def prepare(study_like):
         names = match_faces(shape, faces)
         if not names:
             continue
+        used += names
         if l["type"] == "Force":
             fo = ObjectsFem.makeConstraintForce(doc, f"Force{k + 1}")
             fo.References = [(copy, tuple(names))]
@@ -493,9 +522,13 @@ def prepare(study_like):
         pass
     mesh.ElementOrder = "2nd"
     # straight-sided 2nd order elements: as good in bending, and they can't
-    # turn inside out on thin curved features ("nonpositive jacobian")
+    # turn inside out on thin curved features ("nonpositive jacobian"). But
+    # their mid-side nodes are off a curved face, so FreeCAD can't find the
+    # face's elements and a load or fixture on a bore, a pipe or a round tank
+    # wall would be dropped without a word: keep them curved then.
+    curved = any(_curved(shape.getElement(n)) for n in set(used))
     try:
-        mesh.SecondOrderLinear = True
+        mesh.SecondOrderLinear = not curved
     except Exception:
         pass
     an.addObject(mesh)
@@ -1046,6 +1079,11 @@ class StressPanel:
         self.info["solve_s"] = round(time.time() - self.t0, 1)
         res = s.load()
         out = summarise(res, self.info)
+        if not out.get("max_disp") and not out.get("max_stress"):
+            # nothing moved: the loads never reached the mesh
+            self.result.setText("<span style='color:#b00020'><b>No result:</b> the loads didn't "
+                                "reach the model. Pick the load faces again and re-run.</span>")
+            return
         show_result(res, self.rdoc)
         self._save_study(out)
         self._show(out)

@@ -378,6 +378,8 @@ def add_dimensions(page, view, scale, overall=True, holes=True, max_hole_sizes=4
             continue
         sizes.setdefault(round(r, 2), []).append((i, c))
     tier = 2
+    called = []                       # centres already given a callout
+    placed = set()                    # position dimensions already made
     for r, lst in sorted(sizes.items(), key=lambda kv: -len(kv[1]))[:max_hole_sizes]:
         lst.sort(key=lambda t: (round(t[1].y, 1), t[1].x))
         i, c = lst[0]
@@ -390,8 +392,16 @@ def add_dimensions(page, view, scale, overall=True, holes=True, max_hole_sizes=4
             n = len(lst)
             d.FormatSpec = (f"{n}× ⌀%.1f" if n > 1 else "⌀%.1f")
             page.addView(d)
-            d.X, d.Y = (c.x - r) * k - 14.0, (c.y + r) * k + 8.0
+            # concentric circles (a bore and its counterbore or bearing seat)
+            # take turns round the centre, so their callouts don't sit on
+            # top of each other
+            turn = sum(1 for q in called if (q - c).Length < 0.05)
+            sx, sy = ((-1, 1), (1, -1), (1, 1), (-1, -1))[turn % 4]
+            d.X, d.Y = (c.x + sx * r) * k + sx * 14.0, (c.y + sy * r) * k + sy * 8.0
+            called.append(V(c))
             made.append(d)
+            if turn:
+                continue                  # its centre is already dimensioned
             # where the first hole is: from the left and the bottom
             for kind, p0, p1, pos in (
                     ("DistanceX", V(dx0, c.y, 0), V(c.x, c.y, 0),
@@ -400,6 +410,11 @@ def add_dimensions(page, view, scale, overall=True, holes=True, max_hole_sizes=4
                      (xmin - off * tier, (dy0 + c.y) / 2))):
                 if abs((p1 - p0).Length) < 1e-3:
                     continue
+                key = (kind, round(p0.x if kind == "DistanceX" else p0.y, 1),
+                       round(p1.x if kind == "DistanceX" else p1.y, 1))
+                if key in placed:
+                    continue                  # another hole in line already gives it
+                placed.add(key)
                 dd = _distance_dim(view, kind, p0, p1, k)
                 if dd is not None:
                     dd.X, dd.Y = pos[0] * k, pos[1] * k

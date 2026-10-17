@@ -304,8 +304,12 @@ def camera_preset(doc, name="iso", fov=40.0, dist_factor=1.6, target=None):
     """A camera looking at the whole model: iso, front, right, top, aft_iso."""
     bb = App.BoundBox()
     for o in doc.Objects:
+        # origin planes and axes (every App::Part and Body has them) are infinite
+        if o.TypeId in ("App::Origin", "App::Line", "App::Plane", "App::Point"):
+            continue
         try:
-            if hasattr(o, "Shape") and o.ViewObject.Visibility and o.Shape.BoundBox.isValid():
+            if hasattr(o, "Shape") and o.ViewObject.Visibility and o.Shape.BoundBox.isValid() \
+                    and o.Shape.BoundBox.DiagonalLength < 1e9:
                 bb.add(o.Shape.BoundBox)
         except Exception:
             pass
