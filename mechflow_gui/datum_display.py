@@ -42,12 +42,21 @@ def _colour(plane):
     return (0.6, 0.6, 0.6)
 
 
+_size_cache = {}       # doc name -> (time, size): measuring every shape is slow on big models
+
+
 def _size(doc):
+    import time
     from mechflow_gui import sketch_start
+    hit = _size_cache.get(doc.Name)
+    if hit and time.time() - hit[0] < 2.0:
+        return hit[1]
     try:
-        return sketch_start._plane_size(doc)
+        size = sketch_start._plane_size(doc)
     except Exception:
-        return 100.0
+        size = 100.0
+    _size_cache[doc.Name] = (time.time(), size)
+    return size
 
 
 def _build(plane, size):
@@ -146,6 +155,10 @@ def refresh():
 
     doc = App.ActiveDocument
     if doc is None:
+        return
+    if not any(o.TypeId == "PartDesign::Body" for o in doc.Objects):
+        for key in [k for k in _shown if k[0] == doc.Name]:
+            _remove(key)
         return
     size = _size(doc)
     wanted = set()

@@ -700,6 +700,11 @@ def register():
         "pressure or the part's weight, and see the stress, deflection and factor of safety",
         icon_path("StressCheck.svg"), lambda: _run("simulation", "stress_check"),
         lambda: App.ActiveDocument is not None))
+    Gui.addCommand("MechFlow_MotionStudy", _simple(
+        "Motion Study", "Animate the model: keyframes of any parameter or configuration, "
+        "eased in between, with camera moves (position, target, field of view, orbits); "
+        "play it, scrub it and export an MP4", icon_path("MotionStudy.svg"),
+        lambda: _run("motion", "show"), lambda: App.ActiveDocument is not None))
     Gui.addCommand("MechFlow_Configurations", _simple(
         "Configurations", "Versions of the part in one file, driven from a Design Table "
         "(sizes, lengths, suppressed features): add, switch and edit them",
