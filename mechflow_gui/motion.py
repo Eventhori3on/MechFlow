@@ -372,7 +372,29 @@ def export(doc, study, path, view=None, progress=None, frames_dir=None, first=0,
     folder = frames_dir or tempfile.mkdtemp(prefix="mechflow_motion_")
     os.makedirs(folder, exist_ok=True)
     stop = n if last is None else min(n, last + 1)
-    for i in range(first, stop):
+    look = data.get("look", "Viewport")
+    if look != "Viewport":
+        # the studio renderer (Render): same lighting and finishes as Quick Render
+        from mechflow_gui import render
+        still = render.camera_from_view(view)
+        todo = []
+        for i in range(first, stop):
+            f = os.path.join(folder, f"frame_{i:05d}.png")
+            if frames_dir and os.path.isfile(f):
+                continue
+            t = i / fps
+            cam = camera_at(data, t)
+            todo.append(((lambda t=t: apply(doc, data, t, view, camera=False)),
+                         render.camera_from_motion(cam) if cam else still, f))
+        if todo:
+            ok, msg = render.render_frames(
+                doc, todo, {"width": w, "height": h, "supersample": int(data.get("supersample", 2)),
+                            "backdrop": look, "floor": True,
+                            "exposure": float(App.ParamGet(PARAM_PATH).GetFloat("RenderExposure", 1.2))},
+                progress=progress)
+            if not ok:
+                return folder, msg + " Frames so far are in " + folder
+    for i in range(first, stop) if look == "Viewport" else ():
         f = os.path.join(folder, f"frame_{i:05d}.png")
         if frames_dir and os.path.isfile(f):
             continue
@@ -498,12 +520,19 @@ class MotionPanel:
         self.bg.addItems(["Current", "White", "Black", "Transparent"])
         el.addWidget(QtWidgets.QLabel("Background"), 1, 0)
         el.addWidget(self.bg, 1, 1)
+        self.look = QtWidgets.QComboBox()
+        self.look.addItems(["Viewport", "Studio dark", "Studio light", "White"])
+        self.look.setToolTip("Viewport: frames as the 3D view draws them (fast).\n"
+                             "Studio: rendered like Render - lighting, soft shadows and finishes.")
+        self.look.currentTextChanged.connect(lambda t: self.bg.setEnabled(t == "Viewport"))
+        el.addWidget(QtWidgets.QLabel("Look"), 1, 2)
+        el.addWidget(self.look, 1, 3)
         ffb = QtWidgets.QPushButton("ffmpeg...")
         ffb.clicked.connect(self._set_ffmpeg)
-        el.addWidget(ffb, 1, 2)
+        el.addWidget(ffb, 2, 2)
         xb = QtWidgets.QPushButton("Export video...")
         xb.clicked.connect(self._export)
-        el.addWidget(xb, 1, 3)
+        el.addWidget(xb, 2, 3)
         lay.addWidget(ex)
         self.msg = QtWidgets.QLabel()
         self.msg.setWordWrap(True)
@@ -577,6 +606,8 @@ class MotionPanel:
         self.fps.setValue(int(d.get("fps", 30)))
         self.res.setCurrentText(f"{d.get('width', 1920)} x {d.get('height', 1080)}")
         self.bg.setCurrentText(d.get("background", "Current"))
+        self.look.setCurrentText(d.get("look", "Viewport"))
+        self.bg.setEnabled(self.look.currentText() == "Viewport")
         self.tlabel.setText(f"{self.t:.1f} / {dur:.1f} s")
 
     def _row(self):
@@ -785,7 +816,8 @@ class MotionPanel:
     def _export(self):
         d = self._data()
         w, h = (int(x) for x in self.res.currentText().split(" x "))
-        d.update(width=w, height=h, fps=self.fps.value(), background=self.bg.currentText())
+        d.update(width=w, height=h, fps=self.fps.value(), background=self.bg.currentText(),
+                 look=self.look.currentText())
         save(self.study, d)
         ff = ffmpeg_path()
         f, _ = QtWidgets.QFileDialog.getSaveFileName(

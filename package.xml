@@ -2,8 +2,8 @@
 <package format="1" xmlns="https://wiki.freecad.org/Package_Metadata">
   <name>MechFlow</name>
   <description>A SOLIDWORKS-style workflow for FreeCAD: tabbed CommandManager, SOLIDWORKS-named feature dialogs (extrude, revolve, sweep, loft, fillet, shell, patterns, Hole Wizard), sketch relations and status colours, drawings from parts, assembly mates, a Toolbox of standard parts (fasteners, EN and ASME flanges, pipe, fittings, bearings) that size themselves to holes and pipe ends, weldments (structural members, trim/extend, end caps, gussets, cut lists), sheet metal (with the SheetMetal Workbench), pipe routing (3D sketches, valves and instruments, your own library parts), drawing packs, exploded views, a supplier pack (PDF, STEP, DXF flats), a SimulationXpress-style stress check, Motion Study animations (keyframes, camera moves, MP4 export), Section View and rollback.</description>
-  <version>0.31.0</version>
-  <date>2026-10-17</date>
+  <version>0.32.0</version>
+  <date>2026-10-18</date>
   <maintainer email="watermanengineeringlimited@proton.me">Waterman Engineering</maintainer>
   <license file="LICENSE">LGPL-2.1-or-later</license>
   <url type="repository" branch="main">https://github.com/Eventhori3on/MechFlow</url>

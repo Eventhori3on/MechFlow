@@ -52,6 +52,7 @@ TABS = [
                    ("Point", "PartDesign_Point")]),
         ("Configu-\nrations", "MechFlow_Configurations"),
         ("Motion\nStudy", "MechFlow_MotionStudy"),
+        ("Render", "MechFlow_Render"),
     ]),
     ("Sketch", [
         ("Sketch", "MechFlow_SketchToggle"),
@@ -134,6 +135,7 @@ TABS = [
         None,
         ("Stress\nCheck", "MechFlow_StressCheck"),
         ("Motion\nStudy", "MechFlow_MotionStudy"),
+        ("Render", "MechFlow_Render"),
     ]),
     ("Drawing", [
         ("Make\nDrawing", "MechFlow_MakeDrawing"),
@@ -191,6 +193,7 @@ TABS = [
                    ("Bill of Materials", "MechFlow_BOM"),
                    ("Interference Detection", "MechFlow_Interference")]),
         ("Motion\nStudy", "MechFlow_MotionStudy"),
+        ("Render", "MechFlow_Render"),
         ("Make\nDrawing", "MechFlow_MakeDrawing"),
         ("Supplier\nPack", "MechFlow_SupplierPack"),
     ]),

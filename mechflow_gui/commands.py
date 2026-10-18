@@ -705,6 +705,10 @@ def register():
         "eased in between, with camera moves (position, target, field of view, orbits); "
         "play it, scrub it and export an MP4", icon_path("MotionStudy.svg"),
         lambda: _run("motion", "show"), lambda: App.ActiveDocument is not None))
+    Gui.addCommand("MechFlow_Render", _simple(
+        "Render", "A studio picture of the model: lighting, soft shadows and metal, paint, "
+        "rubber and glass finishes from each part's material", icon_path("Render.svg"),
+        lambda: _run("render", "show"), lambda: App.ActiveDocument is not None))
     Gui.addCommand("MechFlow_Configurations", _simple(
         "Configurations", "Versions of the part in one file, driven from a Design Table "
         "(sizes, lengths, suppressed features): add, switch and edit them",

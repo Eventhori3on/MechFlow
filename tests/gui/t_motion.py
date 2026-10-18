@@ -71,6 +71,13 @@ def export():
     log("export", os.path.basename(out), os.path.isfile(OUT + "motion_test.mp4"), msg[:60])
     out2, msg2 = M.export(d, st, OUT + "frames_only", frames_dir=OUT + "motion_frames")
     log("frames", len([f for f in os.listdir(OUT + "motion_frames") if f.endswith(".png")]))
+    # the studio look: the same frames through the renderer
+    data = M.load(st); data.update(look="Studio light", supersample=1, fps=5); M.save(st, data)
+    out3, msg3 = M.export(d, st, OUT + "studio_frames", frames_dir=OUT + "motion_studio")
+    nst = len([f for f in os.listdir(OUT + "motion_studio") if f.endswith(".png")])
+    log("studio frames", nst, msg3[:60])
+    assert nst == 11, nst
+    data = M.load(st); data.update(look="Viewport", fps=10); M.save(st, data)
     S["p"].accept()
     d.saveAs(OUT + "motion_test.FCStd")
     App.closeDocument(d.Name)

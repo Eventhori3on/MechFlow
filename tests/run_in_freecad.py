@@ -37,7 +37,7 @@ def _mf_suite():
         "t_lpat", "t_stdparts", "t_joint", "t_smart", "t_weld", "t_weld2", "t_sm", "t_mass",
         "t_nozzle", "t_pack", "t_route", "t_config", "t_stress", "t_supplier",
         "t_sketch3d", "t_valves", "t_author", "t_sizes", "t_scan", "t_scan2", "t_sheet", "t_pipedraw",
-        "t_stress2", "t_motion"]
+        "t_stress2", "t_motion", "t_render"]
     timeout_s = int(globals().get("MF_TIMEOUT", 600))
     real_exit = os._exit
     boxes = {k: getattr(QtWidgets.QMessageBox, k) for k in ("information", "warning", "critical")}

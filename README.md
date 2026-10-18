@@ -103,9 +103,9 @@ and deflection.
 </td>
 <td valign="top">
 
-<b>🎬 Motion Study</b><br>
-Animate parameters and configurations with eased keyframes, move the camera
-(field of view, orbits) and export to MP4, GIF or PNG frames.
+<b>🎬 Motion Study & Render</b><br>
+Animate parameters and configurations with eased keyframes and camera moves,
+and render stills or videos with studio lighting, shadows and real finishes.
 
 </td>
 </tr>
@@ -143,6 +143,7 @@ Animate parameters and configurations with eased keyframes, move the camera
 | Routing (Tube and Pipe) | **Routing** tab: Draw Pipe, Route Pipe, Valves & Instruments, Pipe Specs |
 | SimulationXpress | **Stress Check** |
 | Motion Study (Animation) | **Motion Study** |
+| PhotoView 360 / Visualize | **Render** (studio) |
 | Pack and Go for suppliers | **Supplier Pack** |
 
 ---
@@ -528,6 +529,32 @@ Find it on the Features, Evaluate and Assembly tabs. A study is saved in the
   you pick, on the current, white, black or a transparent background, or a
   folder of PNG frames. Video export uses **ffmpeg**: point
   MechFlow at it with the *ffmpeg...* button if it isn't found on the PATH.
+- **Look:** *Viewport* (as the 3D view draws it, fastest) or *Studio dark /
+  Studio light / White*, rendered frame by frame like **Render** below.
+
+</details>
+
+<details>
+<summary><b>Render</b>: studio pictures of the model <i>(new in 0.32)</i></summary>
+
+Find it on the Features, Evaluate and Assembly tabs. Set up the view, then:
+
+- **Render** (seconds): MechFlow's own studio renderer, using the VTK that
+  comes with FreeCAD. Image-based studio lighting, a key light with shadows,
+  ambient occlusion and a floor with a soft ground shadow. Backdrops: *Studio
+  dark*, *Studio light* or *White*. Sizes from the current view up to 4K,
+  Draft / Good / Best quality.
+- **Finishes picked for you:** from each part's material (stainless,
+  aluminium, cast iron, brass, rubber, glass, timber...), its Toolbox type
+  (flanges and pipe bare steel, bearings machined, gaskets rubber, bolts
+  zinc plated) or its colour (painted parts keep their colour as gloss
+  paint). Change any group in the **Appearances** list: paint, powder coat,
+  plastic, bare / machined / brushed stainless steel, galvanised, aluminium,
+  cast iron, chrome, brass, copper, zinc, black oxide, rubber, glass, timber.
+  The choice is saved with the part.
+- **See-through parts stay see-through:** parts shown transparent in the view
+  (context steelwork, decks, guards) render translucent with their outlines.
+- **Save image** as PNG or JPEG.
 
 </details>
 
